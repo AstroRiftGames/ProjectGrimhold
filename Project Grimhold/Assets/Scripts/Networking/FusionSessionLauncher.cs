@@ -15,6 +15,9 @@ public sealed class FusionSessionLauncher : MonoBehaviour
     [SerializeField]
     private FusionInputProvider _inputProvider;
 
+    [SerializeField]
+    private NetworkPlayerSpawner _playerSpawner;
+
     private NetworkRunner _runner;
     private GameObject _runnerObject;
     private bool _isStarting;
@@ -43,6 +46,16 @@ public sealed class FusionSessionLauncher : MonoBehaviour
             return;
         }
 
+        if (_playerSpawner == null)
+        {
+            Debug.LogError(
+                $"{nameof(FusionSessionLauncher)} requires " +
+                $"{nameof(NetworkPlayerSpawner)}.",
+                this);
+
+            return;
+        }
+
         _isStarting = true;
 
         _runnerObject = new GameObject("NetworkRunner");
@@ -51,6 +64,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         _runner = _runnerObject.AddComponent<NetworkRunner>();
         _runner.ProvideInput = true;
         _runner.AddCallbacks(_inputProvider);
+        _runner.AddCallbacks(_playerSpawner);
 
         StartGameResult result = await _runner.StartGame(
             new StartGameArgs
@@ -102,6 +116,12 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         {
             _inputProvider =
                 GetComponent<FusionInputProvider>();
+        }
+
+        if (_playerSpawner == null)
+        {
+            _playerSpawner =
+                GetComponent<NetworkPlayerSpawner>();
         }
     }
 #endif
