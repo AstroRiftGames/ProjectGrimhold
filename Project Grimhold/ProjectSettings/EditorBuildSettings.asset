@@ -15,4 +15,4 @@ EditorBuildSettings:
     path: Assets/Photon/FusionMenu/FusionSampleMenu.unity
     guid: 74c3b330900a03442806ce69f1fe5955
   m_configObjects:
-    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
+    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 01417ad1ffe3eaf42902e08e5648e87d, type: 3}
