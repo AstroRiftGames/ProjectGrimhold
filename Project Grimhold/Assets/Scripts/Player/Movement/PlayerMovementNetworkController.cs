@@ -17,10 +17,20 @@ public sealed class PlayerMovementNetworkController : NetworkBehaviour
 
     private bool _dependenciesValid;
 
+    private const float ValidDirectionSqrThreshold = 0.0001f;
+    private const float ValidMovementSqrThreshold = 0.000001f;
+
+    [SerializeField]
+    private Vector2 _defaultFacingDirection = Vector2.down;
+
     [Networked]
     public NetworkBool IsControlEnabled { get; private set; }
 
-    public Vector2 LastMoveDirection { get; private set; }
+    [Networked]
+    public Vector2 FacingDirection { get; private set; }
+
+    [Networked]
+    public NetworkBool IsMoving { get; private set; }
 
     private void Awake()
     {
@@ -35,6 +45,14 @@ public sealed class PlayerMovementNetworkController : NetworkBehaviour
         if (HasStateAuthority)
         {
             IsControlEnabled = true;
+
+            Vector2 initialFacing = _defaultFacingDirection.normalized;
+            if (initialFacing.sqrMagnitude < 0.001f)
+            {
+                initialFacing = Vector2.down;
+            }
+            FacingDirection = initialFacing;
+            IsMoving = false;
         }
     }
 
@@ -45,15 +63,25 @@ public sealed class PlayerMovementNetworkController : NetworkBehaviour
             return;
         }
 
+        IsMoving = false;
+
         Vector2 moveDirection = ReadMoveDirection();
 
-        LastMoveDirection = moveDirection;
+        if (IsControlEnabled && moveDirection.sqrMagnitude > ValidDirectionSqrThreshold)
+        {
+            FacingDirection = moveDirection.normalized;
+        }
 
         Vector2 displacement = IsControlEnabled
             ? moveDirection * _moveSpeed * Runner.DeltaTime
             : Vector2.zero;
 
-        _movementMotor.Move(displacement);
+        Vector2 appliedDisplacement = _movementMotor.Move(displacement);
+
+        if (appliedDisplacement.sqrMagnitude > ValidMovementSqrThreshold)
+        {
+            IsMoving = true;
+        }
     }
 
     public bool TrySetControlEnabled(bool enabled)

@@ -10,6 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 7397229956843810021}
   - component: {fileID: 1066720069559603162}
+  - component: {fileID: 7572879158521877428}
+  - component: {fileID: 5232659655046367733}
   m_Layer: 0
   m_Name: Body
   m_TagString: Untagged
@@ -81,17 +83,53 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 9207615455222063624, guid: e331faf2cebcaf145a91ccd91c1930a4, type: 3}
+  m_Sprite: {fileID: 1125379381859389362, guid: da8349851a125f64ebfa5968c4788c4a, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 1, y: 2}
+  m_Size: {x: 0.9375, y: 1.1875}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &7572879158521877428
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1221760144332657486}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 088148c325c606548b763d9702520844, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimatorView
+  _animator: {fileID: 5232659655046367733}
+  _movementController: {fileID: 7201000000000000005}
+--- !u!95 &5232659655046367733
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1221760144332657486}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 1bb0bd22efee00745ac5da2e9e18dc90, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &4369124737019072436
 GameObject:
   m_ObjectHideFlags: 0
@@ -286,7 +324,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f321d6c52d4b4f6a9d3b7e3f1f0a6242, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _moveSpeed: 10
+  _moveSpeed: 1
   _movementMotor: {fileID: 7201000000000000004}
+  _defaultFacingDirection: {x: 0, y: -1}
   _IsControlEnabled:
+    RawValue: 0
+  _FacingDirection: {x: 0, y: 0}
+  _IsMoving:
     RawValue: 0

@@ -45,14 +45,19 @@ public sealed class Kinematic2DMovementMotor : MonoBehaviour
     /// Resolves and applies the requested displacement immediately for the
     /// current simulation tick.
     /// </summary>
-    public void Move(Vector2 displacement)
+    /// <returns>
+    /// The actual displacement applied to the Rigidbody after resolving collisions.
+    /// </returns>
+    public Vector2 Move(Vector2 displacement)
     {
         // Sincronizar la posición del Rigidbody con el Transform restaurado por Fusion al inicio del tick
         _rigidbody.position = transform.position;
 
+        Vector2 initialPosition = _rigidbody.position;
+
         if (displacement.sqrMagnitude <= MinimumMoveSqrMagnitude)
         {
-            return;
+            return Vector2.zero;
         }
 
         ConfigureContactFilter();
@@ -77,7 +82,7 @@ public sealed class Kinematic2DMovementMotor : MonoBehaviour
             if (!TryGetClosestHit(hitCount, out RaycastHit2D closestHit))
             {
                 ApplyPosition(_rigidbody.position + remainingDisplacement);
-                return;
+                break;
             }
 
             float allowedDistance = Mathf.Min(
@@ -104,6 +109,8 @@ public sealed class Kinematic2DMovementMotor : MonoBehaviour
 
             remainingDisplacement = blockedRemainder;
         }
+
+        return _rigidbody.position - initialPosition;
     }
 
     private void ApplyPosition(Vector2 position)

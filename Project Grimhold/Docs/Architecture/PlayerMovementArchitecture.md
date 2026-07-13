@@ -237,8 +237,8 @@ Una API pública pequeña y estable puede ser suficiente para desacoplar compone
                        │ estado renderizado
                        ▼
 ┌──────────────────────────────────────────────┐
-│ PlayerMovementPresenter                      │
-│ Animator, sprite, orientación y feedback     │
+│ PlayerAnimatorView                           │
+│ Animator, orientación y estado de movimiento │
 └──────────────────────────────────────────────┘
 
                PlayerMovementConfig
@@ -405,31 +405,27 @@ La fuente autoritativa es el resultado de simulación aceptado por State Authori
 
 La configuración exacta del componente debe validarse durante la implementación en el prefab y con la versión instalada de Fusion.
 
-### 7.7 `PlayerMovementPresenter`
+### 7.7 `PlayerAnimatorView`
 
-Tipo propuesto:
+Tipo:
 
 ```text
-NetworkBehaviour o MonoBehaviour, según la información de render necesaria
+MonoBehaviour
 ```
 
 Responsabilidades:
 
-- Leer estado simulado o renderizado.
-- Calcular velocidad visual cuando pueda derivarse del desplazamiento renderizado.
-- Determinar reposo o movimiento con un umbral visual.
-- Actualizar parámetros del `Animator`.
-- Actualizar orientación o flip del sprite.
-- Disparar feedback exclusivamente visual y local.
-- Detectar transiciones visuales como parado → moviendo.
+- Leer `FacingDirection` e `IsMoving` desde `PlayerMovementNetworkController`.
+- Utilizar `LateUpdate` para actualizar de forma desacoplada los parámetros del `Animator`.
+- Usar hashes estáticos (`MoveX`, `MoveY`, `IsMoving`) para la actualización de parámetros.
+- Tolerar la falta de inicialización o referencias temporales en el editor/escena.
 
 No debe:
 
-- Escribir propiedades `[Networked]`.
+- Sincronizar o escribir variables `[Networked]`.
 - Modificar posición.
-- Cambiar bloqueos autoritativos.
-- Leer input local para representar proxies.
-- Ser fuente de verdad de locomoción.
+- Leer entrada del jugador.
+- Depender de referencias directas de Photon Fusion.
 
 ### 7.8 `PlayerMovementConfig`
 
@@ -791,29 +787,22 @@ La UI no debe escribir directamente el estado de movimiento de red salvo que exi
 
 ## 17. Presentación state-driven
 
-El movimiento continuo se presenta observando estado, no recibiendo eventos de cada tick.
+El movimiento continuo y la orientación se presentan observando el estado sincronizado de red en `LateUpdate`, libre de dependencias de red o input.
 
 Flujo:
 
 ```text
-posición renderizada / estado simulado
-    → PlayerMovementPresenter
-    → Animator
-    → SpriteRenderer
-    → Audio/VFX/UI visual
+FacingDirection & IsMoving ([Networked])
+    → PlayerAnimatorView
+    → Animator (MoveX, MoveY, IsMoving)
 ```
 
-El presenter puede derivar:
+El visualizador de animación (`PlayerAnimatorView`):
+- Lee `FacingDirection` de `PlayerMovementNetworkController` (usando `Vector2.down` como fallback visual si aún es cero).
+- Lee `IsMoving` para controlar las transiciones entre caminar e idle.
+- Actualiza los parámetros flotantes y booleanos del Animator.
 
-- Velocidad renderizada.
-- Magnitud visual.
-- Dirección de facing.
-- Inicio y fin visual de movimiento.
-- Cambio visual de dirección.
-
-La velocidad visual puede calcularse mediante desplazamiento entre frames renderizados cuando sea suficiente.
-
-No se sincroniza `SimulatedVelocity` solamente para conducir una animación básica.
+No se sincronizan clips ni variables visuales directamente; la animación se deriva enteramente del estado simulado.
 
 ---
 
@@ -865,23 +854,13 @@ No se exige que estos nombres o propiedades sean `[Networked]`.
 
 ### 19.2 API del motor
 
-Una API concreta y pequeña es suficiente para v1:
+La API del motor de colisiones es concreta y directa para la v1:
 
 ```csharp
-MovementResult Move(Vector2 desiredDisplacement);
+public Vector2 Move(Vector2 desiredDisplacement);
 ```
 
-Un resultado mínimo puede contener:
-
-```csharp
-public readonly struct MovementResult
-{
-    public Vector2 AppliedDisplacement { get; }
-    public bool WasBlocked { get; }
-}
-```
-
-`MovementResult` solo debe existir si el controlador o la presentación necesitan esa información. Si no existe un consumidor, el motor puede mantener una API más simple.
+Retorna el desplazamiento físico neto realmente aplicado tras resolver colisiones, deslizamientos e iteraciones del motor. Esto permite al controlador determinar con precisión si el personaje se desplazó o quedó bloqueado contra una pared.
 
 ### 19.3 Interfaces
 
@@ -1046,7 +1025,7 @@ Assets/
         │   └── PlayerMovementBlockReason.cs
         │
         └── Presentation/
-            └── PlayerMovementPresenter.cs
+            └── PlayerAnimatorView.cs
 
 Assets/
 └── Scripts/
