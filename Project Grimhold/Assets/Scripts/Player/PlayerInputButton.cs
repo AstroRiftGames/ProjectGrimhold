@@ -1,5 +1,5 @@
 public enum PlayerInputButton
 {
-    Fire,
+    PrimaryAttack,
     Interact
 }

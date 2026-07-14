@@ -1,26 +1,35 @@
 using Fusion;
 using UnityEngine;
 
+/// <summary>
+/// Captures local device input and exposes it as gameplay intentions.
+///
+/// This component does not execute movement, attacks or any other gameplay
+/// action. Fusion consumes the accumulated state through
+/// <see cref="ConsumeNetworkInput"/>.
+/// </summary>
+[DisallowMultipleComponent]
 public sealed class PlayerInputReader : MonoBehaviour
 {
-    [Header("Look")]
-    [SerializeField, Min(0f)]
-    private float _lookSensitivity = 0.1f;
+    [Header("Aim")]
+    [SerializeField]
+    private Camera _worldCamera;
 
     [SerializeField]
-    private Vector2 _pitchLimits = new(-89f, 89f);
+    private float _aimPlaneZ;
 
     private PlayerInputActions _inputActions;
 
     private Vector2 _moveDirection;
-
-    private Vector2 _lookRotation;
+    private Vector2 _aimWorldPosition;
 
     private NetworkButtons _buttons;
     private bool _resetAccumulatedButtons;
 
     private void Awake()
     {
+        CacheDependencies();
+
         _inputActions = new PlayerInputActions();
     }
 
@@ -32,7 +41,10 @@ public sealed class PlayerInputReader : MonoBehaviour
     private void Update()
     {
         ResetAccumulatedButtonsIfRequired();
+
         ReadMovement();
+        ReadAimWorldPosition();
+        ReadPrimaryAttack();
     }
 
     private void OnDisable()
@@ -46,14 +58,21 @@ public sealed class PlayerInputReader : MonoBehaviour
         _inputActions.Dispose();
     }
 
+    /// <summary>
+    /// Returns the latest local intentions accumulated since Fusion's
+    /// previous input collection.
+    /// </summary>
     public PlayerNetworkInput ConsumeNetworkInput()
     {
+        // The reset is deferred until the next Update. This preserves a
+        // latched press when Fusion requests input more than once in the
+        // same rendered frame.
         _resetAccumulatedButtons = true;
 
         return new PlayerNetworkInput
         {
             MoveDirection = _moveDirection,
-            LookRotation = _lookRotation,
+            AimWorldPosition = _aimWorldPosition,
             Buttons = _buttons
         };
     }
@@ -64,11 +83,62 @@ public sealed class PlayerInputReader : MonoBehaviour
             _inputActions.Gameplay.Move.ReadValue<Vector2>();
     }
 
+    private void ReadAimWorldPosition()
+    {
+        if (_worldCamera == null)
+        {
+            return;
+        }
+
+        Vector2 screenPosition =
+            _inputActions.Gameplay.AimPosition.ReadValue<Vector2>();
+
+        Transform cameraTransform = _worldCamera.transform;
+
+        Vector3 aimPlanePoint =
+            new(0f, 0f, _aimPlaneZ);
+
+        float distanceToAimPlane = Vector3.Dot(
+            aimPlanePoint - cameraTransform.position,
+            cameraTransform.forward);
+
+        if (distanceToAimPlane < 0f)
+        {
+            return;
+        }
+
+        Vector3 screenPoint = new(
+            screenPosition.x,
+            screenPosition.y,
+            distanceToAimPlane);
+
+        Vector3 worldPosition =
+            _worldCamera.ScreenToWorldPoint(screenPoint);
+
+        _aimWorldPosition = new Vector2(
+            worldPosition.x,
+            worldPosition.y);
+    }
+
+    private void ReadPrimaryAttack()
+    {
+        var primaryAttackAction =
+            _inputActions.Gameplay.PrimaryAttack;
+
+        AccumulateButton(
+            PlayerInputButton.PrimaryAttack,
+            primaryAttackAction.IsPressed(),
+            primaryAttackAction.WasPressedThisFrame());
+    }
+
     private void AccumulateButton(
         PlayerInputButton button,
         bool isPressed,
         bool wasPressedThisFrame)
     {
+        // IsPressed transports the held state for automatic attacks.
+        // WasPressedThisFrame preserves a very short tap until Fusion
+        // consumes the input.
         if (isPressed || wasPressedThisFrame)
         {
             _buttons.Set(button, true);
@@ -89,12 +159,28 @@ public sealed class PlayerInputReader : MonoBehaviour
     private void ResetInputState()
     {
         _moveDirection = Vector2.zero;
+        _aimWorldPosition = Vector2.zero;
         _buttons = default;
         _resetAccumulatedButtons = false;
     }
 
-    private static float NormalizeAngle(float angle)
+    private void CacheDependencies()
     {
-        return Mathf.Repeat(angle + 180f, 360f) - 180f;
+        if (_worldCamera == null)
+        {
+            _worldCamera = Camera.main;
+        }
     }
+
+#if UNITY_EDITOR
+    private void Reset()
+    {
+        CacheDependencies();
+    }
+
+    private void OnValidate()
+    {
+        CacheDependencies();
+    }
+#endif
 }

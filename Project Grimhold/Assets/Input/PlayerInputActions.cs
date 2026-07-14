@@ -100,6 +100,24 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": true
+                },
+                {
+                    ""name"": ""PrimaryAttack"",
+                    ""type"": ""Button"",
+                    ""id"": ""5f663e04-6125-4078-9506-33ddad58c114"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""AimPosition"",
+                    ""type"": ""Value"",
+                    ""id"": ""02da01fc-518a-4464-9288-e243aa96bde9"",
+                    ""expectedControlType"": ""Vector2"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": true
                 }
             ],
             ""bindings"": [
@@ -157,6 +175,28 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
                     ""action"": ""Move"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""56925029-626e-4cdb-b91e-ad6ed2963b5e"",
+                    ""path"": ""<Mouse>/leftButton"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""PrimaryAttack"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""2dddc238-65eb-4eb9-b044-ef3052f1b433"",
+                    ""path"": ""<Pointer>/position"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""AimPosition"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -166,6 +206,8 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
         // Gameplay
         m_Gameplay = asset.FindActionMap("Gameplay", throwIfNotFound: true);
         m_Gameplay_Move = m_Gameplay.FindAction("Move", throwIfNotFound: true);
+        m_Gameplay_PrimaryAttack = m_Gameplay.FindAction("PrimaryAttack", throwIfNotFound: true);
+        m_Gameplay_AimPosition = m_Gameplay.FindAction("AimPosition", throwIfNotFound: true);
     }
 
     ~@PlayerInputActions()
@@ -247,6 +289,8 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
     private readonly InputActionMap m_Gameplay;
     private List<IGameplayActions> m_GameplayActionsCallbackInterfaces = new List<IGameplayActions>();
     private readonly InputAction m_Gameplay_Move;
+    private readonly InputAction m_Gameplay_PrimaryAttack;
+    private readonly InputAction m_Gameplay_AimPosition;
     /// <summary>
     /// Provides access to input actions defined in input action map "Gameplay".
     /// </summary>
@@ -262,6 +306,14 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Gameplay/Move".
         /// </summary>
         public InputAction @Move => m_Wrapper.m_Gameplay_Move;
+        /// <summary>
+        /// Provides access to the underlying input action "Gameplay/PrimaryAttack".
+        /// </summary>
+        public InputAction @PrimaryAttack => m_Wrapper.m_Gameplay_PrimaryAttack;
+        /// <summary>
+        /// Provides access to the underlying input action "Gameplay/AimPosition".
+        /// </summary>
+        public InputAction @AimPosition => m_Wrapper.m_Gameplay_AimPosition;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -291,6 +343,12 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
             @Move.started += instance.OnMove;
             @Move.performed += instance.OnMove;
             @Move.canceled += instance.OnMove;
+            @PrimaryAttack.started += instance.OnPrimaryAttack;
+            @PrimaryAttack.performed += instance.OnPrimaryAttack;
+            @PrimaryAttack.canceled += instance.OnPrimaryAttack;
+            @AimPosition.started += instance.OnAimPosition;
+            @AimPosition.performed += instance.OnAimPosition;
+            @AimPosition.canceled += instance.OnAimPosition;
         }
 
         /// <summary>
@@ -305,6 +363,12 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
             @Move.started -= instance.OnMove;
             @Move.performed -= instance.OnMove;
             @Move.canceled -= instance.OnMove;
+            @PrimaryAttack.started -= instance.OnPrimaryAttack;
+            @PrimaryAttack.performed -= instance.OnPrimaryAttack;
+            @PrimaryAttack.canceled -= instance.OnPrimaryAttack;
+            @AimPosition.started -= instance.OnAimPosition;
+            @AimPosition.performed -= instance.OnAimPosition;
+            @AimPosition.canceled -= instance.OnAimPosition;
         }
 
         /// <summary>
@@ -352,5 +416,19 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnMove(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "PrimaryAttack" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnPrimaryAttack(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "AimPosition" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnAimPosition(InputAction.CallbackContext context);
     }
 }
