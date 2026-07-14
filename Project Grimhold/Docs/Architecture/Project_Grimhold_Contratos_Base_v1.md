@@ -1,181 +1,244 @@
 # Especificación de Contratos, Interfaces y Estructuras
 
-> **Proyecto:** Project Grimhold\
-> **Estado:** Borrador v1
+> [!NOTE]
+> **Proyecto:** Project Grimhold  
+> **Estado:** Borrador v1  
+> **Última Modificación:** 2026-07-14
+
+---
 
 ## Objetivo
 
-Este documento define los contratos base que utilizarán todos los
-sistemas de gameplay del proyecto.
+Este documento define los contratos base, interfaces y estructuras de datos que formarán los cimientos de todos los sistemas de gameplay de **Project Grimhold**.
 
-### Principios
+### Principios de Diseño
+* 🔌 **Desacoplamiento Total:** Independientes de Photon Fusion.
+* 🧩 **Abstracción:** Sin dependencia de clases concretas (`Player`, `Enemy`, `NPC`).
+* 🖥️ **Separación de Presentación:** Sin lógica visual o de sonido (VFX/SFX).
+* 🌐 **Simulación Pura:** Sin lógica de red directa en el core.
+* ♻️ **Reutilización:** Diseñado para ser extensible y reusable.
 
--   Independientes de Photon Fusion.
--   Independientes de clases concretas (`Player`, `Enemy`, `NPC`).
--   Sin lógica visual.
--   Sin lógica de red.
--   Reutilizables.
+---
 
-------------------------------------------------------------------------
+## Arquitectura
 
-# Arquitectura
-
-``` text
-Personaje
-    │
-    ├── Solicita ataque
-    ├── Recibe daño
-    └── Interactúa
+### Relaciones del Personaje
+```mermaid
+graph TD
+    Character["Personaje"]
+    Character -->|"Solicita"| Attack["Ataque"]
+    Character -->|"Recibe"| Damage["Daño"]
+    Character -->|"Realiza"| Interaction["Interacción"]
 ```
 
-## Componentes conceptuales
+### Componentes Conceptuales
 
-  Sistema        Responsabilidad
-  -------------- ----------------------------------
-  Personajes     Solicitan acciones
-  Ataques        Detectan objetivos
-  Daño           Valida y aplica daño
-  Interacción    Procesa acciones sobre objetos
-  Presentación   Reproduce VFX, SFX y animaciones
+| Sistema | Responsabilidad |
+| :--- | :--- |
+| **Personajes** | Solicitan y coordinan acciones básicas del juego. |
+| **Ataques** | Detentan e identifican objetivos dentro del alcance. |
+| **Daño** | Valida la legitimidad, calcula mitigaciones y aplica el daño. |
+| **Interacción** | Procesa las acciones iniciadas sobre objetos interactivos en el mundo. |
+| **Presentación** | Capa visual/sonora que reacciona a los resultados del gameplay (VFX, SFX, animaciones). |
 
-------------------------------------------------------------------------
+---
 
-# Flujo de ataque
+## Flujo de Ataque y Daño
 
-``` text
-Character
-    │
-    ▼
-AttackRequest
-    │
-    ▼
-IAttack
-    │
-    ▼
-DamageRequest
-    │
-    ▼
-IDamageable
-    │
-    ▼
-DamageResult
-    │
-    ▼
-Presentación
+A continuación se muestra el ciclo de vida desde la solicitud de un ataque hasta su presentación visual:
+
+```mermaid
+flowchart TD
+    A[Character] -->|1. Envía| B(AttackRequest)
+    B -->|2. Procesa| C{IAttack}
+    C -->|3. Genera| D(DamageRequest)
+    D -->|4. Aplica a| E{IDamageable}
+    E -->|5. Retorna| F(DamageResult)
+    F -->|6. Dispara| G[Presentación VFX/SFX/UI]
+
+    style A fill:#1a1a2e,stroke:#3b5998,stroke-width:2px,color:#fff
+    style C fill:#162447,stroke:#0f4c75,stroke-width:2px,color:#fff
+    style E fill:#162447,stroke:#0f4c75,stroke-width:2px,color:#fff
+    style G fill:#1f4068,stroke:#e43f5a,stroke-width:2px,color:#fff
 ```
 
-------------------------------------------------------------------------
+---
 
-# Interfaces
+## Interfaces Contrato
 
-## ICharacter
+### `ICharacter`
+* **Responsabilidad:** Representar la entidad base para cualquier personaje controlable o autónomo en el juego.
+```csharp
+public interface ICharacter
+{
+    string Id { get; }
+    bool IsAlive { get; }
+}
+```
 
-Responsabilidad: - Representar cualquier personaje del juego.
+### `IDamageable`
+* **Responsabilidad:** Recibir solicitudes de daño, aplicar lógica interna de mitigación/salud, y devolver el resultado del impacto.
+```csharp
+public interface IDamageable
+{
+    DamageResult ApplyDamage(DamageRequest request);
+}
+```
 
-## IDamageable
+### `IAttacker`
+* **Responsabilidad:** Habilitar a un actor para iniciar solicitudes de ataque.
+```csharp
+public interface IAttacker
+{
+    AttackResult RequestAttack(AttackRequest request);
+}
+```
 
-Responsabilidad: - Recibir una solicitud de daño y devolver un
-resultado.
+### `IAttack`
+* **Responsabilidad:** Encapsular la detección espacial de objetivos (colisiones, rangos) y originar las peticiones de daño.
+```csharp
+public interface IAttack
+{
+    DamageRequest ExecuteAttack(AttackRequest request);
+}
+```
 
-## IAttacker
+### `IInteractable`
+* **Responsabilidad:** Procesar acciones contextuales de interacción sobre objetos del entorno.
+```csharp
+public interface IInteractable
+{
+    InteractionResult Interact(InteractionRequest request);
+    bool CanInteract(InteractionRequest request);
+}
+```
 
-Responsabilidad: - Solicitar la ejecución de un ataque.
+### `IPickup`
+* **Responsabilidad:** Especialización de `IInteractable` para representar objetos que pueden ser añadidos al inventario o consumidos al tacto.
 
-## IAttack
+---
 
-Responsabilidad: - Detectar objetivos y generar un `DamageRequest`.
+## Estructuras de Datos
 
-## IInteractable
+### `DamageRequest`
+Estructura inmutable que encapsula la información de un intento de daño.
 
-Responsabilidad: - Procesar una interacción.
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `AttackerId` | `string` | Identificador del originador del daño. |
+| `TargetId` | `string` | Identificador de la entidad receptora. |
+| `Amount` | `float` | Cantidad bruta de daño solicitado. |
+| `DamageType` | `DamageType` | Categoría o elemento del daño. |
+| `Direction` | `Vector3` | Dirección del vector de impacto. |
+| `HitPoint` | `Vector3` | Punto exacto de contacto en el espacio 3D/2D. |
+| `Timestamp` | `double` | Marca de tiempo del tick de la simulación. |
 
-## IPickup
+---
 
-Especialización de `IInteractable` para objetos recogibles.
+### `DamageResult`
+Resultado devuelto por una entidad al procesar un `DamageRequest`.
 
-------------------------------------------------------------------------
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `IsApplied` | `bool` | `true` si el daño fue procesado y afectó la salud. |
+| `AppliedDamage` | `float` | Cantidad neta de daño tras defensas/mitigación. |
+| `RemainingHealth` | `float` | Vida restante de la entidad después del impacto. |
+| `IsFatal` | `bool` | Indica si el daño redujo la vida a 0, provocando la muerte. |
 
-# Estructuras
+---
 
-## DamageRequest
+### `AttackRequest`
+Parámetros provistos al iniciar un ataque.
 
-Debe contener:
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `AttackerId` | `string` | Identificador de la entidad que ataca. |
+| `AttackType` | `AttackType` | Tipo o habilidad utilizada. |
+| `Origin` | `Vector3` | Punto de origen del ataque. |
+| `Direction` | `Vector3` | Vector de dirección del ataque. |
+| `Range` | `float` | Alcance máximo del ataque. |
+| `Timestamp` | `double` | Tick o marca temporal del inicio. |
 
--   Identificador del atacante
--   Identificador del objetivo
--   Cantidad de daño
--   Tipo de daño
--   Dirección del impacto
--   Punto de impacto
--   Timestamp
+---
 
-## DamageResult
+### `AttackResult`
+Información de retorno tras la ejecución y detección del ataque.
 
-Debe indicar:
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `Success` | `bool` | Indica si el ataque se ejecutó (ej. no estaba en cooldown). |
+| `HasHit` | `bool` | `true` si el ataque colisionó con algún objetivo válido. |
+| `HitTargetId` | `string` | Identificador del primer objetivo detectado (si aplica). |
 
--   Si el daño fue aplicado
--   Daño aplicado
--   Vida restante
--   Si el objetivo murió
+---
 
-## AttackRequest
+### `InteractionRequest`
+Parámetros necesarios para disparar una interacción.
 
-Debe contener:
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `InteractorId` | `string` | Identificador de la entidad que interactúa. |
+| `TargetId` | `string` | Identificador del objeto interactivo. |
+| `Timestamp` | `double` | Marca de tiempo del evento. |
 
--   Atacante
--   Tipo de ataque
--   Origen
--   Dirección
--   Alcance
--   Timestamp
+---
 
-## AttackResult
+### `InteractionResult`
+Respuesta de un objeto tras ser interactuado.
 
-Debe indicar:
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `Success` | `bool` | `true` si la interacción fue exitosa y completada. |
+| `IsConsumed` | `bool` | Indica si el objeto interactivo debe ser destruido o desactivado. |
+| `ResultData` | `string` | Metadatos lógicos adicionales sobre el resultado. |
 
--   Si el ataque fue ejecutado
--   Si encontró un objetivo
--   Objetivo detectado
+---
 
-## InteractionRequest
+## Enumeraciones
 
-Información necesaria para iniciar una interacción.
+```csharp
+public enum DamageType
+{
+    Physical,
+    Magical,
+    TrueDamage
+}
 
-## InteractionResult
+public enum AttackType
+{
+    Melee,
+    Ranged,
+    AreaOfEffect
+}
 
-Debe indicar:
+public enum InteractionType
+{
+    Trigger,
+    Hold,
+    Toggle
+}
+```
 
--   Éxito
--   Si fue consumida
--   Resultado lógico
+---
 
-------------------------------------------------------------------------
+## Sincronización (Photon Fusion)
 
-# Enumeraciones
+> [!IMPORTANT]
+> **Reglas de Red y Autoridad:**
+> * **Desacoplamiento:** Los contratos e interfaces no conocen clases ni APIs de Photon Fusion.
+> * **State Authority:** La lógica autorizada se ejecuta exclusivamente en el peer que posee **State Authority**.
+> * **Input Authority:** Los clientes únicamente capturan y solicitan acciones transmitiendo inputs estructurados.
+> * **No Confianza:** El atacante local nunca decide o confirma el impacto o daño aplicado.
+> * **Sincronización:** La autoridad valida la colisión, aplica los cambios de estado en sus propiedades `[Networked]` y propaga el resultado a los proxies.
 
--   DamageType
--   AttackType
--   InteractionType
+---
 
-------------------------------------------------------------------------
+## Criterios de Aceptación
 
-# Sincronización (Photon Fusion)
-
--   Los contratos no conocen Photon Fusion.
--   La lógica autorizada se ejecuta únicamente en la instancia con
-    **State Authority**.
--   Los clientes solo solicitan acciones.
--   El atacante nunca confirma el daño.
--   La autoridad valida y sincroniza el resultado.
-
-------------------------------------------------------------------------
-
-# Criterios de aceptación
-
--   ✅ Compilan independientemente.
--   ✅ No dependen de clases concretas.
--   ✅ Reutilizables por jugadores, enemigos y NPCs.
--   ✅ El daño identifica atacante y objetivo.
--   ✅ El resultado informa aplicación y muerte.
--   ✅ Sin presentación visual.
--   ✅ El cliente atacante no confirma el daño.
+- [x] **Compilación Aislada:** Compilan en un ensamblado de lógica pura.
+- [x] **Cero Concreción:** Sin acoplamiento a clases finales.
+- [x] **Polimorfismo:** Igualmente utilizables para jugadores, enemigos y NPCs.
+- [x] **Trazabilidad:** El daño identifica inequívocamente al atacante y al objetivo.
+- [x] **Ciclo de Vida:** El resultado reporta la salud final y estado de vitalidad.
+- [x] **Puntualidad Visual:** Cero llamadas o referencias a presentación, delegadas a callbacks o observadores de estado.
+- [x] **Seguridad de Red:** El cliente atacante carece de autoridad para validar el daño.
