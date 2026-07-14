@@ -6,6 +6,15 @@ public sealed class FusionInputProvider : NetworkRunnerCallbacksAdapter
     [SerializeField]
     private PlayerInputReader _inputReader;
 
+    private NetworkRunner _runner;
+
+    private void Start()
+    {
+        _runner = FindAnyObjectByType<NetworkRunner>();
+
+        _runner.AddCallbacks(this);
+    }
+
     public override void OnInput(
         NetworkRunner runner,
         NetworkInput input)
