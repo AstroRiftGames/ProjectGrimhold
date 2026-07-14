@@ -1,4 +1,5 @@
 using Fusion;
+using System;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -24,36 +25,21 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
     public NetworkRunner Runner => _runner;
 
-    private async void Start()
-    {
-        await StartSessionAsync();
-    }
-
-    private async Task StartSessionAsync()
+    public async Task<bool> StartSessionAsync(string sessionName, GameMode mode)
     {
         if (_isStarting || _runner != null)
-        {
-            return;
-        }
+            return false;
 
         if (_inputProvider == null)
         {
-            Debug.LogError(
-                $"{nameof(FusionSessionLauncher)} requires " +
-                $"{nameof(FusionInputProvider)}.",
-                this);
-
-            return;
+            Debug.LogError($"{nameof(FusionSessionLauncher)} requires {nameof(FusionInputProvider)}.", this);
+            return false;
         }
 
         if (_playerSpawner == null)
         {
-            Debug.LogError(
-                $"{nameof(FusionSessionLauncher)} requires " +
-                $"{nameof(NetworkPlayerSpawner)}.",
-                this);
-
-            return;
+            Debug.LogError($"{nameof(FusionSessionLauncher)} requires {nameof(NetworkPlayerSpawner)}.", this);
+            return false;
         }
 
         _isStarting = true;
@@ -63,39 +49,49 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
         _runner = _runnerObject.AddComponent<NetworkRunner>();
         _runner.ProvideInput = true;
-        _runner.AddCallbacks(_inputProvider);
-        _runner.AddCallbacks(_playerSpawner);
+        //_runner.AddCallbacks(_inputProvider);
+        //_runner.AddCallbacks(_playerSpawner);
 
-        StartGameResult result = await _runner.StartGame(
-            new StartGameArgs
-            {
-                GameMode = GameMode.AutoHostOrClient,
-                SessionName = _sessionName,
-                PlayerCount = _maxPlayers
-            });
-
-        _isStarting = false;
-
-        if (!result.Ok)
+        try
         {
-            Debug.LogError(
-                $"Fusion failed to start. " +
-                $"Reason: {result.ShutdownReason}",
+            StartGameResult result = await _runner.StartGame(
+                new StartGameArgs
+                {
+                    GameMode = mode,
+                    SessionName = sessionName,
+                    PlayerCount = _maxPlayers
+                });
+
+            if (!result.Ok)
+            {
+                Debug.LogError(
+                    $"Fusion failed to start. Reason: {result.ShutdownReason}",
+                    this);
+
+                DestroyRunner();
+                return false;
+            }
+
+            Debug.Log(
+                $"Fusion session started. " +
+                $"Session: {_runner.SessionInfo.Name}. " +
+                $"Peer: {(_runner.IsServer ? "Host" : "Client")}.",
                 this);
 
-            DestroyRunner();
-            return;
+            return true;
         }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex, this);
 
-        string peerType = _runner.IsServer
-            ? "Host"
-            : "Client";
+            DestroyRunner();
 
-        Debug.Log(
-            $"Fusion session started. " +
-            $"Session: {_runner.SessionInfo.Name}. " +
-            $"Peer: {peerType}.",
-            this);
+            return false;
+        }
+        finally
+        {
+            _isStarting = false;
+        }
     }
 
     private void DestroyRunner()
