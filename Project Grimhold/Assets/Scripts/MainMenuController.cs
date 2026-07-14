@@ -1,7 +1,8 @@
 using Fusion;
+using System;
 using TMPro;
+using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 public class MainMenuController : MonoBehaviour
@@ -27,6 +28,9 @@ public class MainMenuController : MonoBehaviour
     [SerializeField]
     private LobbyMenuController lobbyMenu;
 
+    [SerializeField]
+    private TextMeshProUGUI _statusText;
+
     private void OnEnable()
     {
         createRoomButton.onClick.AddListener(CreateRoom);
@@ -45,11 +49,21 @@ public class MainMenuController : MonoBehaviour
         joinRoomButton.interactable = false;
         roomCodeInput.interactable = false;
 
+        _statusText.text = "Creating room...";
+
         string roomCode = GenerateRoomCode();
 
-        await launcher.StartSessionAsync(
-            roomCode,
-            GameMode.Host);
+        try
+        {
+            await launcher.StartSessionAsync(
+                roomCode,
+                GameMode.Host);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error creating room: {ex.Message}");
+            _statusText.text = $"Failed to create room: {ex.Message}";
+        }
 
         if (launcher.Runner != null)
         {
@@ -65,13 +79,35 @@ public class MainMenuController : MonoBehaviour
 
     public async void JoinRoom()
     {
+        if(string.IsNullOrEmpty(roomCodeInput.text))
+        {
+            _statusText.text = "Please enter a room code.";
+            return;
+        }
+
+        if(roomCodeInput.text.Length < 6)
+        {
+            _statusText.text = "Invalid room code";
+            return;
+        }
+
         createRoomButton.interactable = false;
         joinRoomButton.interactable = false;
         roomCodeInput.interactable = false;
 
-        await launcher.StartSessionAsync(
-            roomCodeInput.text,
-            GameMode.Client);
+        _statusText.text = "Joining...";
+
+        try
+        {
+            await launcher.StartSessionAsync(
+                roomCodeInput.text,
+                GameMode.Client);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error joining room: {ex.Message}");
+            _statusText.text = $"Failed to join room: {ex.Message}";
+        }
 
         if (launcher.Runner != null)
         {
@@ -82,6 +118,8 @@ public class MainMenuController : MonoBehaviour
             createRoomButton.interactable = true;
             joinRoomButton.interactable = true;
             roomCodeInput.interactable = true;
+
+            _statusText.text = "";
         }
     }
 
@@ -95,6 +133,6 @@ public class MainMenuController : MonoBehaviour
 
     private string GenerateRoomCode()
     {
-        return Random.Range(100000, 999999).ToString();
+        return UnityEngine.Random.Range(100000, 999999).ToString();
     }
 }

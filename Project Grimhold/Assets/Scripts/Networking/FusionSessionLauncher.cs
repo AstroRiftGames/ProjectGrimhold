@@ -20,6 +20,9 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
     public async Task<bool> StartSessionAsync(string sessionName, GameMode mode)
     {
+        if (string.IsNullOrEmpty(sessionName) || string.IsNullOrWhiteSpace(sessionName))
+            throw new Exception("Invalid session code. The code cannot be empty or null.");
+
         if (_isStarting || _runner != null)
             return false;
 
@@ -64,7 +67,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
             DestroyRunner();
 
-            return false;
+            throw;
         }
         finally
         {

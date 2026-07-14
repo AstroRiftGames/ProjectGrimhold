@@ -180,7 +180,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerSpawner
   _playerPrefab:
-    RawGuidValue: 559d61453799e6b44a01d8feb42b03f4
+    RawGuidValue: fea3a7b256f965a4eb9b965832939741
   _spawnGroups:
   - Group: 0
     SpawnPoints:
