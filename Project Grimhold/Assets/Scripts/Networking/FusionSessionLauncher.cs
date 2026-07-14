@@ -24,12 +24,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
     public NetworkRunner Runner => _runner;
 
-    private async void Start()
-    {
-        await StartSessionAsync();
-    }
-
-    private async Task StartSessionAsync()
+    public async Task StartSessionAsync(string sessionName, GameMode mode)
     {
         if (_isStarting || _runner != null)
         {
@@ -67,12 +62,12 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         _runner.AddCallbacks(_playerSpawner);
 
         StartGameResult result = await _runner.StartGame(
-            new StartGameArgs
-            {
-                GameMode = GameMode.AutoHostOrClient,
-                SessionName = _sessionName,
-                PlayerCount = _maxPlayers
-            });
+        new StartGameArgs
+        {
+            GameMode = mode,
+            SessionName = sessionName,
+            PlayerCount = _maxPlayers
+        });
 
         _isStarting = false;
 
