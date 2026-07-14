@@ -12,7 +12,7 @@ public class LobbyMenuController : MonoBehaviour
     [SerializeField] private GameObject _statusText;
 
     [Header("Scene")]
-    [SerializeField] private string gameplayScene = "Game";
+    [SerializeField] private string gameplayScene = "Gameplay";
 
     private NetworkRunner _runner;
 

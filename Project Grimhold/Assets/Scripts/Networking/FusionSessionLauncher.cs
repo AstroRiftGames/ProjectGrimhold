@@ -12,13 +12,6 @@ public sealed class FusionSessionLauncher : MonoBehaviour
     [SerializeField, Min(1)]
     private int _maxPlayers = 4;
 
-    [Header("Dependencies")]
-    [SerializeField]
-    private FusionInputProvider _inputProvider;
-
-    [SerializeField]
-    private NetworkPlayerSpawner _playerSpawner;
-
     private NetworkRunner _runner;
     private GameObject _runnerObject;
     private bool _isStarting;
@@ -30,27 +23,12 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         if (_isStarting || _runner != null)
             return false;
 
-        if (_inputProvider == null)
-        {
-            Debug.LogError($"{nameof(FusionSessionLauncher)} requires {nameof(FusionInputProvider)}.", this);
-            return false;
-        }
-
-        if (_playerSpawner == null)
-        {
-            Debug.LogError($"{nameof(FusionSessionLauncher)} requires {nameof(NetworkPlayerSpawner)}.", this);
-            return false;
-        }
-
         _isStarting = true;
 
         _runnerObject = new GameObject("NetworkRunner");
-        _runnerObject.transform.SetParent(transform);
-
         _runner = _runnerObject.AddComponent<NetworkRunner>();
+        DontDestroyOnLoad(_runnerObject);
         _runner.ProvideInput = true;
-        //_runner.AddCallbacks(_inputProvider);
-        //_runner.AddCallbacks(_playerSpawner);
 
         try
         {
@@ -104,21 +82,4 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         _runner = null;
         _runnerObject = null;
     }
-
-#if UNITY_EDITOR
-    private void OnValidate()
-    {
-        if (_inputProvider == null)
-        {
-            _inputProvider =
-                GetComponent<FusionInputProvider>();
-        }
-
-        if (_playerSpawner == null)
-        {
-            _playerSpawner =
-                GetComponent<NetworkPlayerSpawner>();
-        }
-    }
-#endif
 }

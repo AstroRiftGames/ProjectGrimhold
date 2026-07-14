@@ -43,6 +43,7 @@ public class MainMenuController : MonoBehaviour
     {
         createRoomButton.interactable = false;
         joinRoomButton.interactable = false;
+        roomCodeInput.interactable = false;
 
         string roomCode = GenerateRoomCode();
 
@@ -58,6 +59,7 @@ public class MainMenuController : MonoBehaviour
         {
             createRoomButton.interactable = true;
             joinRoomButton.interactable = true;
+            roomCodeInput.interactable = true;
         }
     }
 
@@ -65,6 +67,7 @@ public class MainMenuController : MonoBehaviour
     {
         createRoomButton.interactable = false;
         joinRoomButton.interactable = false;
+        roomCodeInput.interactable = false;
 
         await launcher.StartSessionAsync(
             roomCodeInput.text,
@@ -78,6 +81,7 @@ public class MainMenuController : MonoBehaviour
         {
             createRoomButton.interactable = true;
             joinRoomButton.interactable = true;
+            roomCodeInput.interactable = true;
         }
     }
 
