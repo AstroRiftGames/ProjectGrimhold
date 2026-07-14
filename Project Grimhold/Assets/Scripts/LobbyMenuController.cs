@@ -2,21 +2,40 @@ using Fusion;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
-public class LobbyMenu : MonoBehaviour
+public class LobbyMenuController : MonoBehaviour
 {
     [Header("UI")]
     [SerializeField] private TextMeshProUGUI sessionCodeText;
+    [SerializeField] private Button _startGameButton;
+    [SerializeField] private GameObject _statusText;
 
     [Header("Scene")]
     [SerializeField] private string gameplayScene = "Game";
 
     private NetworkRunner _runner;
 
+    private void OnEnable()
+    {
+        _startGameButton.onClick.AddListener(StartGame);
+    }
+
+    private void OnDisable()
+    {
+        _startGameButton.onClick.RemoveListener(StartGame);
+
+    }
+
     public void Initialize(NetworkRunner runner)
     {
         _runner = runner;
-        RefreshSessionCode();
+
+        sessionCodeText.text = _runner.SessionInfo.Name;
+
+        _startGameButton.gameObject.SetActive(_runner.IsServer);
+        _statusText.gameObject.SetActive(!_runner.IsServer);
+
     }
 
     public void RefreshSessionCode()

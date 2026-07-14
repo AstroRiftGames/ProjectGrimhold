@@ -1,6 +1,7 @@
 using Fusion;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 public class MainMenuController : MonoBehaviour
@@ -20,6 +21,12 @@ public class MainMenuController : MonoBehaviour
     [SerializeField]
     private Button joinRoomButton;
 
+    [SerializeField]
+    private GameObject lobbyPanel;
+
+    [SerializeField]
+    private LobbyMenuController lobbyMenu;
+
     private void OnEnable()
     {
         createRoomButton.onClick.AddListener(CreateRoom);
@@ -34,7 +41,8 @@ public class MainMenuController : MonoBehaviour
 
     public async void CreateRoom()
     {
-        menuPanel.SetActive(false);
+        createRoomButton.interactable = false;
+        joinRoomButton.interactable = false;
 
         string roomCode = GenerateRoomCode();
 
@@ -42,15 +50,43 @@ public class MainMenuController : MonoBehaviour
             roomCode,
             GameMode.Host);
 
+        if (launcher.Runner != null)
+        {
+            ShowLobby();
+        }
+        else
+        {
+            createRoomButton.interactable = true;
+            joinRoomButton.interactable = true;
+        }
     }
 
     public async void JoinRoom()
     {
-        menuPanel.SetActive(false);
+        createRoomButton.interactable = false;
+        joinRoomButton.interactable = false;
 
         await launcher.StartSessionAsync(
             roomCodeInput.text,
             GameMode.Client);
+
+        if (launcher.Runner != null)
+        {
+            ShowLobby();
+        }
+        else
+        {
+            createRoomButton.interactable = true;
+            joinRoomButton.interactable = true;
+        }
+    }
+
+    private void ShowLobby()
+    {
+        menuPanel.SetActive(false);
+        lobbyPanel.SetActive(true);
+
+        lobbyMenu.Initialize(launcher.Runner);
     }
 
     private string GenerateRoomCode()
