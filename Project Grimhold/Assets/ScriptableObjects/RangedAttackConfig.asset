@@ -20,7 +20,7 @@ MonoBehaviour:
   _lifetimeSeconds: 5
   _maxRange: 10
   _projectilePrefab:
-    _value: 0
+    RawGuidValue: b68349702bdcbb84f9aed456ed6b035c
   _impactLayerMask:
     serializedVersion: 2
     m_Bits: 128

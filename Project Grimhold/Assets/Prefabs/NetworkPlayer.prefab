@@ -147,9 +147,10 @@ GameObject:
   - component: {fileID: 7201000000000000005}
   - component: {fileID: 2769229401594790361}
   - component: {fileID: 729366679366126330}
-  - component: {fileID: 9019893569150015336}
   - component: {fileID: 2223098016359047016}
   - component: {fileID: 438361259854513489}
+  - component: {fileID: 6623183966111262148}
+  - component: {fileID: 746440606046388817}
   m_Layer: 7
   m_Name: NetworkPlayer
   m_TagString: Player
@@ -197,6 +198,7 @@ MonoBehaviour:
   - {fileID: 729366679366126330}
   - {fileID: 2223098016359047016}
   - {fileID: 438361259854513489}
+  - {fileID: 746440606046388817}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &7201000000000000001
 MonoBehaviour:
@@ -355,7 +357,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCombatNetworkController
   _characterSource: {fileID: 729366679366126330}
   _attackOrigin: {fileID: 2520259848855165086}
-  _activeAttackSource: {fileID: 9019893569150015336}
+  _activeAttackSource: {fileID: 6623183966111262148}
   _IsAttackEnabled:
     RawValue: 0
 --- !u!114 &729366679366126330
@@ -372,21 +374,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCharacter
   _maxHealth: 100
   _Health: 0
---- !u!114 &9019893569150015336
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4369124737019072436}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2b2497378f8e8fc4f85bf69fb76bbcf0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MeleeAttack
-  _config: {fileID: 11400000, guid: 51a16f09a8a5c954dbf55fa2549aed51, type: 2}
-  _targetQuerySource: {fileID: 2223098016359047016}
-  _damageResolverSource: {fileID: 438361259854513489}
 --- !u!114 &2223098016359047016
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -412,3 +399,31 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ba6e9ecc0c8b7a941af085f53dd307e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DamageResolver
+--- !u!114 &6623183966111262148
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 659036344901ca64da118190533cd931, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RangedAttack
+  _config: {fileID: 11400000, guid: 72c2830a8240480099febce01129a88f, type: 2}
+  _projectileSpawnerSource: {fileID: 746440606046388817}
+--- !u!114 &746440606046388817
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 94978841ce6b54e4d993548e1fcdb9cc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FusionProjectileSpawner
+  _config: {fileID: 11400000, guid: 72c2830a8240480099febce01129a88f, type: 2}
+  _damageResolverSource: {fileID: 438361259854513489}

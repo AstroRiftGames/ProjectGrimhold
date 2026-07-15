@@ -16,6 +16,9 @@ public sealed class RangedAttackConfig : AttackConfig
     [SerializeField, Min(0.1f)]
     private float _maxRange = 10f;
 
+    [SerializeField, Min(0f)]
+    private float _projectileSpawnOffset = 0.7f;
+
     [SerializeField]
     private NetworkPrefabRef _projectilePrefab;
 
@@ -25,6 +28,7 @@ public sealed class RangedAttackConfig : AttackConfig
     public float ProjectileSpeed => _projectileSpeed;
     public float LifetimeSeconds => _lifetimeSeconds;
     public float MaxRange => _maxRange;
+    public float ProjectileSpawnOffset => _projectileSpawnOffset;
     public NetworkPrefabRef ProjectilePrefab => _projectilePrefab;
     public LayerMask ImpactLayerMask => _impactLayerMask;
 
@@ -50,6 +54,12 @@ public sealed class RangedAttackConfig : AttackConfig
         if (_maxRange <= 0f)
         {
             error = $"{nameof(MaxRange)} must be greater than zero (current: {_maxRange}).";
+            return false;
+        }
+
+        if (_projectileSpawnOffset < 0f)
+        {
+            error = $"{nameof(ProjectileSpawnOffset)} must be greater than or equal to zero (current: {_projectileSpawnOffset}).";
             return false;
         }
 
@@ -86,6 +96,11 @@ public sealed class RangedAttackConfig : AttackConfig
         if (_maxRange < 0.1f)
         {
             _maxRange = 0.1f;
+        }
+
+        if (_projectileSpawnOffset < 0f)
+        {
+            _projectileSpawnOffset = 0f;
         }
     }
 }
