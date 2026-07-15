@@ -22,6 +22,9 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
     [SerializeField]
     private MonoBehaviour _activeAttackSource;
 
+    [SerializeField]
+    private PlayerMovementNetworkController _movementController;
+
     private ICharacter _character;
     private IAttack _activeAttack;
     private bool _dependenciesValid;
@@ -154,8 +157,13 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
             return;
         }
 
-        Vector2 originPos = _attackOrigin.position;
-        Vector2 direction = input.AimWorldPosition - originPos;
+        if (_movementController == null)
+        {
+            return;
+        }
+
+        Vector2 originPos = _attackOrigin != null ? (Vector2)_attackOrigin.position : (Vector2)transform.position;
+        Vector2 direction = _movementController.FacingDirection;
 
         // Rechazar direcciones inválidas con magnitud prácticamente cero
         if (direction.sqrMagnitude < 0.0001f)
@@ -257,6 +265,11 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
         {
             _attackOrigin = transform;
         }
+
+        if (_movementController == null)
+        {
+            _movementController = GetComponent<PlayerMovementNetworkController>();
+        }
     }
 
     private bool ValidateDependencies()
@@ -279,6 +292,12 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
             return false;
         }
 
+        if (_movementController == null)
+        {
+            Debug.LogError($"{nameof(PlayerCombatNetworkController)} requires an assigned {nameof(PlayerMovementNetworkController)}.", this);
+            return false;
+        }
+
         return true;
     }
 
@@ -288,6 +307,11 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
         if (_characterSource == null)
         {
             _characterSource = GetComponent<MonoBehaviour>() as ICharacter != null ? GetComponent<MonoBehaviour>() : null;
+        }
+
+        if (_movementController == null)
+        {
+            _movementController = GetComponent<PlayerMovementNetworkController>();
         }
 
         CacheDependencies();

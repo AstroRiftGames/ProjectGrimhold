@@ -27,7 +27,7 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
 
     private readonly List<CandidateTarget> _candidates = new();
     private readonly List<AttackTarget> _results = new();
-    private readonly HashSet<EntityId> _processedIds = new();
+    private readonly Dictionary<EntityId, int> _entityIdToCandidateIndex = new();
 
     private void Awake()
     {
@@ -45,7 +45,7 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
 
     /// <summary>
     /// Consulta los objetivos dentro del área circular del ataque melee.
-    /// Deduplica por EntityId, ordena por distancia al centro del ataque y limita a MaximumTargets.
+    /// Deduplica por EntityId, ordena por distancia al origen y limita a MaximumTargets.
     /// </summary>
     public IReadOnlyList<AttackTarget> FindTargets(in AttackTargetQuery query)
     {
@@ -72,7 +72,7 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
         );
 
         _candidates.Clear();
-        _processedIds.Clear();
+        _entityIdToCandidateIndex.Clear();
 
         for (int i = 0; i < hitCount; i++)
         {
@@ -82,7 +82,7 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
                 continue;
             }
 
-            // Recuperar EntityId a través del registro
+            // Recuperar EntityId a través del registro (sin búsquedas globales)
             if (!_registry.TryGetEntityId(col, out EntityId targetId))
             {
                 continue;
@@ -90,12 +90,6 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
 
             // Excluir al atacante
             if (targetId == query.AttackerId)
-            {
-                continue;
-            }
-
-            // Evitar duplicados por EntityId en este tick
-            if (_processedIds.Contains(targetId))
             {
                 continue;
             }
@@ -118,34 +112,52 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
                 continue;
             }
 
-            // Punto de impacto razonable: punto más cercano en el collider, o la posición del objeto
-            Vector2 hitPoint = col.ClosestPoint(attackCenter);
+            // Punto de impacto: punto más cercano al origen del ataque en el collider
+            Vector2 hitPoint = col.ClosestPoint(query.Origin);
 
-            float sqrDistance = (hitPoint - attackCenter).sqrMagnitude;
+            float sqrDistance = (hitPoint - query.Origin).sqrMagnitude;
 
-            _candidates.Add(new CandidateTarget
+            // Deduplicar antes de ordenar: conservar el hit más cercano por EntityId
+            if (_entityIdToCandidateIndex.TryGetValue(targetId, out int existingIndex))
             {
-                Id = targetId,
-                Damageable = damageable,
-                HitPoint = hitPoint,
-                SqrDistance = sqrDistance
-            });
-
-            _processedIds.Add(targetId);
+                if (sqrDistance < _candidates[existingIndex].SqrDistance)
+                {
+                    _candidates[existingIndex] = new CandidateTarget
+                    {
+                        Id = targetId,
+                        Damageable = damageable,
+                        HitPoint = hitPoint,
+                        SqrDistance = sqrDistance
+                    };
+                }
+            }
+            else
+            {
+                _entityIdToCandidateIndex[targetId] = _candidates.Count;
+                _candidates.Add(new CandidateTarget
+                {
+                    Id = targetId,
+                    Damageable = damageable,
+                    HitPoint = hitPoint,
+                    SqrDistance = sqrDistance
+                });
+            }
         }
 
         // Limpiar el buffer de colliders procesados
         Array.Clear(_colliderBuffer, 0, hitCount);
+        _entityIdToCandidateIndex.Clear();
 
         if (_candidates.Count == 0)
         {
             return _results;
         }
 
-        // Ordenamiento por menor distancia cuadrada al attackCenter. Desempate estable usando EntityId.
+        // Ordenamiento por menor distancia cuadrada al origen. Desempate estable usando EntityId.
+        // Ordenamos solo después de procesar y deduplicar todos los colliders.
         _candidates.Sort(CompareCandidates);
 
-        // Limitar la cantidad máxima de objetivos seleccionados
+        // Limitar la cantidad máxima de objetivos seleccionados después de ordenar candidatos únicos
         int targetsToTake = Mathf.Min(_candidates.Count, query.MaximumTargets);
         for (int i = 0; i < targetsToTake; i++)
         {
