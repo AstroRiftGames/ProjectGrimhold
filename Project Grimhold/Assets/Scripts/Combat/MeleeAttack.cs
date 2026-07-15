@@ -57,6 +57,12 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
             return false;
         }
 
+        if (!_config.TryValidate(out string error))
+        {
+            Debug.LogError($"{nameof(MeleeAttack)}: Invalid configuration on GameObject {gameObject.name}. Error: {error}", this);
+            return false;
+        }
+
         if (_targetQuery == null)
         {
             Debug.LogError($"{nameof(MeleeAttack)}: Target query component does not implement {nameof(IAttackTargetQuery)} on GameObject {gameObject.name}.", this);

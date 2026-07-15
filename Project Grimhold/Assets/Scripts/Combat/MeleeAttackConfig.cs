@@ -4,20 +4,8 @@ using UnityEngine;
 /// Configuración inmutable de datos compartidos para ataques melee.
 /// </summary>
 [CreateAssetMenu(fileName = "MeleeAttackConfig", menuName = "Grimhold/Combat/MeleeAttackConfig")]
-public sealed class MeleeAttackConfig : ScriptableObject
+public sealed class MeleeAttackConfig : AttackConfig
 {
-    [SerializeField, Min(0f)]
-    private float _damage = 10f;
-
-    [SerializeField]
-    private DamageType _damageType = DamageType.Physical;
-
-    [SerializeField, Min(0f)]
-    private float _cooldownSeconds = 0.5f;
-
-    [SerializeField]
-    private AttackInputMode _inputMode = AttackInputMode.Press;
-
     [SerializeField, Min(0.1f)]
     private float _range = 1f;
 
@@ -30,17 +18,60 @@ public sealed class MeleeAttackConfig : ScriptableObject
     [SerializeField]
     private LayerMask _targetLayerMask;
 
-    public float Damage => _damage;
-    public DamageType DamageType => _damageType;
-    public float CooldownSeconds => _cooldownSeconds;
-    public AttackInputMode InputMode => _inputMode;
     public float Range => _range;
     public float Radius => _radius;
     public int MaximumTargets => _maximumTargets;
     public LayerMask TargetLayerMask => _targetLayerMask;
 
-    private void OnValidate()
+    public override bool TryValidate(out string error)
     {
+        if (!TryValidateCommon(out error))
+        {
+            return false;
+        }
+
+        if (_range <= 0f)
+        {
+            error = $"{nameof(Range)} must be greater than zero (current: {_range}).";
+            return false;
+        }
+
+        if (_radius <= 0f)
+        {
+            error = $"{nameof(Radius)} must be greater than zero (current: {_radius}).";
+            return false;
+        }
+
+        if (_maximumTargets < 1)
+        {
+            error = $"{nameof(MaximumTargets)} must be at least one (current: {_maximumTargets}).";
+            return false;
+        }
+
+        if (_targetLayerMask.value == 0)
+        {
+            error = $"{nameof(TargetLayerMask)} must not be empty.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    protected override void OnValidate()
+    {
+        base.OnValidate();
+
+        if (_range < 0.1f)
+        {
+            _range = 0.1f;
+        }
+
+        if (_radius < 0.1f)
+        {
+            _radius = 0.1f;
+        }
+
         if (_maximumTargets < 1)
         {
             _maximumTargets = 1;
