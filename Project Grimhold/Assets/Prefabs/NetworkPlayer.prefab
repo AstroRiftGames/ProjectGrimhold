@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 1066720069559603162}
   - component: {fileID: 7572879158521877428}
   - component: {fileID: 5232659655046367733}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Body
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -147,7 +147,10 @@ GameObject:
   - component: {fileID: 7201000000000000005}
   - component: {fileID: 2769229401594790361}
   - component: {fileID: 729366679366126330}
-  m_Layer: 0
+  - component: {fileID: 9019893569150015336}
+  - component: {fileID: 2223098016359047016}
+  - component: {fileID: 438361259854513489}
+  m_Layer: 7
   m_Name: NetworkPlayer
   m_TagString: Player
   m_Icon: {fileID: 0}
@@ -192,6 +195,8 @@ MonoBehaviour:
   - {fileID: 7201000000000000005}
   - {fileID: 2769229401594790361}
   - {fileID: 729366679366126330}
+  - {fileID: 2223098016359047016}
+  - {fileID: 438361259854513489}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &7201000000000000001
 MonoBehaviour:
@@ -350,7 +355,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCombatNetworkController
   _characterSource: {fileID: 729366679366126330}
   _attackOrigin: {fileID: 2520259848855165086}
-  _activeAttackSource: {fileID: 0}
+  _activeAttackSource: {fileID: 9019893569150015336}
   _IsAttackEnabled:
     RawValue: 0
 --- !u!114 &729366679366126330
@@ -367,3 +372,43 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCharacter
   _maxHealth: 100
   _Health: 0
+--- !u!114 &9019893569150015336
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b2497378f8e8fc4f85bf69fb76bbcf0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MeleeAttack
+  _config: {fileID: 11400000, guid: 51a16f09a8a5c954dbf55fa2549aed51, type: 2}
+  _targetQuerySource: {fileID: 2223098016359047016}
+  _damageResolverSource: {fileID: 438361259854513489}
+--- !u!114 &2223098016359047016
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ffe97bc77e45e94cbb7a6aec28a9e91, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Physics2DAttackTargetQuery
+  _colliderBufferSize: 64
+--- !u!114 &438361259854513489
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba6e9ecc0c8b7a941af085f53dd307e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DamageResolver

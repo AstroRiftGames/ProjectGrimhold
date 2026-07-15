@@ -296,6 +296,7 @@ public readonly struct AttackTargetQuery
     public float Range { get; }
     public float Radius { get; }
     public int MaximumTargets { get; }
+    public int TargetLayerMask { get; }
 
     public AttackTargetQuery(
         EntityId attackerId,
@@ -303,14 +304,16 @@ public readonly struct AttackTargetQuery
         Vector2 direction,
         float range,
         float radius,
-        int maximumTargets)
+        int maximumTargets,
+        int targetLayerMask)
     {
         AttackerId = attackerId;
         Origin = origin;
-        Direction = direction.normalized;
+        Direction = direction.sqrMagnitude > 0f ? direction.normalized : Vector2.zero;
         Range = range;
         Radius = radius;
         MaximumTargets = maximumTargets;
+        TargetLayerMask = targetLayerMask;
     }
 }
 ```
@@ -454,7 +457,7 @@ public interface IDamageable : IEntity
 
 ### `IDamageResolver`
 
-Es el único punto del pipeline encargado de localizar el objetivo, validar la solicitud y delegar la aplicación sobre `IDamageable`.
+Es el único punto del pipeline encargado de localizar el objetivo, validar la solicitud y delegar la aplicación sobre
 
 ```csharp
 public interface IDamageResolver
@@ -465,13 +468,17 @@ public interface IDamageResolver
 
 El resolver debe:
 
-1. Localizar el objetivo mediante `TargetId`.
+1. Localizar el objetivo registrado.
 2. Verificar que exista y pueda recibir daño.
-3. Rechazar solicitudes no autorizadas en la capa de integración de red.
-4. Evitar que el atacante se dañe a sí mismo cuando la regla del ataque no lo permita.
+3. Rechazar solicitudes de daño autoinfligido (self-damage).
+4. Delegar la validación final de autoridad a `IDamageable`.
 5. Delegar mitigación, salud y muerte a `IDamageable`.
-6. Devolver un resultado explícito.
-7. Emitir o poner a disposición un `DamageResolvedEvent` para presentación.
+6. Devolver un resultado explícito (`DamageResult`).
+7. `DamageResolvedEvent` se define en los contratos pero aún no se emite ni se sincroniza (sin consumidor/presentación remota en esta fase).
+
+### `EntityRegistry`
+
+El registro de entidades está físicamente asociado a cada `NetworkRunner` individual como un componente de Unity, gestionando la correspondencia entre `EntityId -> IDamageable` y `Collider2D -> EntityId`. Su estado se limpia y destruye automáticamente con el ciclo de vida del runner.
 
 ### `DamageRequest`
 

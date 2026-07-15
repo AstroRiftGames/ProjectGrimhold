@@ -30,6 +30,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
         _runnerObject = new GameObject("NetworkRunner");
         _runner = _runnerObject.AddComponent<NetworkRunner>();
+        _runnerObject.AddComponent<EntityRegistry>();
         DontDestroyOnLoad(_runnerObject);
         _runner.ProvideInput = true;
 

@@ -15,8 +15,10 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     [SerializeField, Min(0.1f)]
     private float _maxHealth = 100f;
 
-    [Networked]
-    private int NetworkedId { get; set; }
+    private Collider2D[] _cachedColliders;
+    private EntityRegistry _registry;
+    private EntityId _registeredId;
+    private bool _isRegistered;
 
     [Networked]
     public float Health { get; private set; }
@@ -25,7 +27,7 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     /// Identificador estable de entidad en el core de gameplay.
     /// Mapeado desde el identificador de red asignado por Photon Fusion.
     /// </summary>
-    public new EntityId Id => new EntityId(NetworkedId);
+    public new EntityId Id => new EntityId(unchecked((int)Object.Id.Raw));
 
     /// <summary>
     /// Indica si el personaje se encuentra con vida.
@@ -38,16 +40,39 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     /// </summary>
     public virtual bool CanReceiveDamage => IsAlive;
 
+    protected virtual void Awake()
+    {
+        _cachedColliders = GetComponentsInChildren<Collider2D>(true);
+    }
+
     /// <summary>
-    /// Inicializa el estado del personaje en la red.
+    /// Inicializa el estado del personaje en la red y lo registra en el EntityRegistry.
     /// </summary>
     public override void Spawned()
     {
         if (HasStateAuthority)
         {
-            // Inicializar el identificador de entidad a partir del ID de red provisto por Fusion.
-            NetworkedId = (int)Object.Id.Raw;
             Health = _maxHealth;
+        }
+
+        // Registrar la entidad y sus colliders asociados para la simulación
+        _registry = Runner.GetComponent<EntityRegistry>();
+        if (_registry != null)
+        {
+            _registeredId = Id;
+            _isRegistered = _registry.TryRegister(_registeredId, this, _cachedColliders);
+        }
+    }
+
+    /// <summary>
+    /// Remueve la entidad y sus colliders del EntityRegistry al ser despawneada.
+    /// </summary>
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (_isRegistered && _registry != null)
+        {
+            _registry.Unregister(_registeredId, _cachedColliders);
+            _isRegistered = false;
         }
     }
 
