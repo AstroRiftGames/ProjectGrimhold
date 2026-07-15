@@ -186,9 +186,12 @@ Encapsula una estrategia concreta de ataque. No modifica salud directamente y no
 public interface IAttack
 {
     AttackType Type { get; }
+    float CooldownSeconds { get; }
+    AttackInputMode InputMode { get; }
     AttackResult Execute(in AttackRequest request);
 }
 ```
+
 
 Una implementación melee puede consultar varios objetivos y enviar un `DamageRequest` por cada `EntityId` único. Una implementación ranged solicita el spawn de un proyectil y finaliza sin aplicar daño inmediato.
 
