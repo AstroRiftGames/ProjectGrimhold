@@ -18,10 +18,16 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
     public NetworkRunner Runner => _runner;
 
-    public async Task<bool> StartSessionAsync(string sessionName, GameMode mode)
+    public async Task<bool> StartSessionAsync(string sessionName, GameMode mode, PlayerClassId selectedClass)
     {
         if (string.IsNullOrEmpty(sessionName) || string.IsNullOrWhiteSpace(sessionName))
             throw new Exception("Invalid session code. The code cannot be empty or null.");
+
+        var joinData = new PlayerJoinData(selectedClass);
+        if (!PlayerJoinDataCodec.TryEncode(joinData, out byte[] token))
+        {
+            throw new ArgumentException($"Invalid or unsupported selected class: {selectedClass}");
+        }
 
         if (_isStarting || _runner != null)
             return false;
@@ -31,6 +37,14 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         _runnerObject = new GameObject("NetworkRunner");
         _runner = _runnerObject.AddComponent<NetworkRunner>();
         _runnerObject.AddComponent<EntityRegistry>();
+
+        LocalPlayerJoinContext joinContext = _runnerObject.GetComponent<LocalPlayerJoinContext>();
+        if (joinContext == null)
+        {
+            joinContext = _runnerObject.AddComponent<LocalPlayerJoinContext>();
+        }
+        joinContext.Initialize(in joinData);
+
         DontDestroyOnLoad(_runnerObject);
         _runner.ProvideInput = true;
 
@@ -41,7 +55,8 @@ public sealed class FusionSessionLauncher : MonoBehaviour
                 {
                     GameMode = mode,
                     SessionName = sessionName,
-                    PlayerCount = _maxPlayers
+                    PlayerCount = _maxPlayers,
+                    ConnectionToken = token
                 });
 
             if (!result.Ok)

@@ -25,14 +25,14 @@ public sealed class MeleeAttackGizmoDrawer : MonoBehaviour
         Vector2 origin = _attackOrigin != null ? (Vector2)_attackOrigin.position : (Vector2)transform.position;
         Vector2 direction = Vector2.down;
 
-        if (_movementController != null)
+        if (_movementController != null && _movementController.Object != null && _movementController.Object.IsValid)
         {
             direction = _movementController.FacingDirection;
         }
         else if (Application.isPlaying)
         {
             var movement = GetComponentInParent<PlayerMovementNetworkController>();
-            if (movement != null)
+            if (movement != null && movement.Object != null && movement.Object.IsValid)
             {
                 direction = movement.FacingDirection;
             }

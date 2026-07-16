@@ -1,0 +1,159 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &5833451083347531578
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1066720069559603162, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_Color.b
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1066720069559603162, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_Color.g
+      value: 0.56353164
+      objectReference: {fileID: 0}
+    - target: {fileID: 1066720069559603162, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_Color.r
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2769229401594790361, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: _activeAttackSource
+      value: 
+      objectReference: {fileID: 3910702486612967767}
+    - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: SortKey
+      value: 2189741101
+      objectReference: {fileID: 0}
+    - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: NetworkedBehaviours.Array.size
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: 'NetworkedBehaviours.Array.data[4]'
+      value: 
+      objectReference: {fileID: 6260509138164896363}
+    - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: 'NetworkedBehaviours.Array.data[5]'
+      value: 
+      objectReference: {fileID: 481970610349468446}
+    - target: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_Name
+      value: NetworkPlayerMelee
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3910702486612967767}
+    - targetCorrespondingSourceObject: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 481970610349468446}
+    - targetCorrespondingSourceObject: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1716456465337594484}
+  m_SourcePrefab: {fileID: 100100000, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+--- !u!114 &6260509138164896363 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 438361259854513489, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+  m_PrefabInstance: {fileID: 5833451083347531578}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7806615118508775566}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba6e9ecc0c8b7a941af085f53dd307e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DamageResolver
+--- !u!1 &7806615118508775566 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+  m_PrefabInstance: {fileID: 5833451083347531578}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &3910702486612967767
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7806615118508775566}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b2497378f8e8fc4f85bf69fb76bbcf0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MeleeAttack
+  _config: {fileID: 11400000, guid: 51a16f09a8a5c954dbf55fa2549aed51, type: 2}
+  _targetQuerySource: {fileID: 481970610349468446}
+  _damageResolverSource: {fileID: 6260509138164896363}
+--- !u!114 &481970610349468446
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7806615118508775566}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ffe97bc77e45e94cbb7a6aec28a9e91, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Physics2DAttackTargetQuery
+  _colliderBufferSize: 64
+--- !u!114 &1716456465337594484
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7806615118508775566}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c8c6d99b204c70409a702b3c4a8a24a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MeleeAttackGizmoDrawer
+  _attackOrigin: {fileID: 0}
+  _config: {fileID: 0}
+  _movementController: {fileID: 0}

@@ -25,7 +25,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
     [Header("Player")]
     [SerializeField]
-    private NetworkPrefabRef _playerPrefab;
+    private PlayerClassCatalog _playerClassCatalog;
 
     [Header("Spawn Groups")]
     [SerializeField]
@@ -39,6 +39,16 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
     private void Awake()
     {
+        if (_playerClassCatalog == null)
+        {
+            Debug.LogError("PlayerClassCatalog reference is missing on NetworkSpawnManager!", this);
+        }
+        else if (!_playerClassCatalog.TryValidate(out string error))
+        {
+            Debug.LogError($"PlayerClassCatalog validation failed: {error}", this);
+            _playerClassCatalog = null;
+        }
+
         _spawnPointLookup.Clear();
 
         foreach (SpawnGroup group in _spawnGroups)
@@ -81,11 +91,59 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         SpawnPlayer(runner, player);
     }
 
+    private bool TryGetJoinData(
+        NetworkRunner runner,
+        PlayerRef player,
+        out PlayerJoinData joinData)
+    {
+        byte[] token = runner.GetPlayerConnectionToken(player);
+
+        if (PlayerJoinDataCodec.TryDecode(token, out joinData))
+        {
+            return true;
+        }
+
+        if (!runner.IsServer || player != runner.LocalPlayer)
+        {
+            joinData = default;
+            return false;
+        }
+
+        LocalPlayerJoinContext context = runner.GetComponent<LocalPlayerJoinContext>();
+
+        if (context == null || !PlayerJoinDataCodec.IsSupported(context.JoinData.ClassId))
+        {
+            joinData = default;
+            return false;
+        }
+
+        joinData = context.JoinData;
+        return true;
+    }
+
     private void SpawnPlayer(NetworkRunner runner, PlayerRef player)
     {
         if (_spawnedPlayers.ContainsKey(player))
         {
             Debug.Log($"Player {player} already spawned.");
+            return;
+        }
+
+        if (_playerClassCatalog == null)
+        {
+            Debug.LogError($"Cannot spawn player {player}: PlayerClassCatalog is null or invalid.");
+            return;
+        }
+
+        if (!TryGetJoinData(runner, player, out PlayerJoinData joinData))
+        {
+            Debug.LogError($"Rejecting spawn for player {player}: Invalid or missing join data.");
+            return;
+        }
+
+        if (!_playerClassCatalog.TryGetPrefab(joinData.ClassId, out NetworkPrefabRef prefab))
+        {
+            Debug.LogError($"Rejecting spawn for player {player}: Class {joinData.ClassId} not registered or has invalid prefab.");
             return;
         }
 
@@ -96,7 +154,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             out Quaternion rotation);
 
         NetworkObject playerObject = runner.Spawn(
-            _playerPrefab,
+            prefab,
             position,
             rotation,
             player);
@@ -105,7 +163,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
         _spawnedPlayers.Add(player, playerObject);
 
-        Debug.Log($"Spawned player {player}.");
+        Debug.Log($"Spawned player {player} with class {joinData.ClassId}.");
     }
 
     public override void OnPlayerLeft(NetworkRunner runner, PlayerRef player)

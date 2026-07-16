@@ -31,24 +31,78 @@ public class MainMenuController : MonoBehaviour
     [SerializeField]
     private TextMeshProUGUI _statusText;
 
+    [Header("Class Selection UI")]
+    [SerializeField]
+    private Button meleeClassButton;
+
+    [SerializeField]
+    private Button rangedClassButton;
+
+    private PlayerClassId _selectedClass = PlayerClassId.None;
+
     private void OnEnable()
     {
         createRoomButton.onClick.AddListener(CreateRoom);
         joinRoomButton.onClick.AddListener(JoinRoom);
+        meleeClassButton.onClick.AddListener(SelectMelee);
+        rangedClassButton.onClick.AddListener(SelectRanged);
+
+        RefreshConnectionButtons();
     }
 
     private void OnDisable()
     {
         createRoomButton.onClick.RemoveListener(CreateRoom);
         joinRoomButton.onClick.RemoveListener(JoinRoom);
+        meleeClassButton.onClick.RemoveListener(SelectMelee);
+        rangedClassButton.onClick.RemoveListener(SelectRanged);
+    }
+
+    private void SelectMelee()
+    {
+        _selectedClass = PlayerClassId.Melee;
+        RefreshConnectionButtons();
+    }
+
+    private void SelectRanged()
+    {
+        _selectedClass = PlayerClassId.Ranged;
+        RefreshConnectionButtons();
+    }
+
+    private void RefreshConnectionButtons()
+    {
+        bool hasValidClass = PlayerJoinDataCodec.IsSupported(_selectedClass);
+        createRoomButton.interactable = hasValidClass;
+        joinRoomButton.interactable = hasValidClass;
+    }
+
+    private void SetUIInteractable(bool interactable)
+    {
+        roomCodeInput.interactable = interactable;
+        meleeClassButton.interactable = interactable;
+        rangedClassButton.interactable = interactable;
+
+        if (interactable)
+        {
+            RefreshConnectionButtons();
+        }
+        else
+        {
+            createRoomButton.interactable = false;
+            joinRoomButton.interactable = false;
+        }
     }
 
     public async void CreateRoom()
     {
-        createRoomButton.interactable = false;
-        joinRoomButton.interactable = false;
-        roomCodeInput.interactable = false;
+        if (!PlayerJoinDataCodec.IsSupported(_selectedClass))
+        {
+            _statusText.text = "Please select a class first.";
+            return;
+        }
 
+        SetUIInteractable(false);
         _statusText.text = "Creating room...";
 
         string roomCode = GenerateRoomCode();
@@ -57,7 +111,8 @@ public class MainMenuController : MonoBehaviour
         {
             await launcher.StartSessionAsync(
                 roomCode,
-                GameMode.Host);
+                GameMode.Host,
+                _selectedClass);
         }
         catch (Exception ex)
         {
@@ -71,37 +126,39 @@ public class MainMenuController : MonoBehaviour
         }
         else
         {
-            createRoomButton.interactable = true;
-            joinRoomButton.interactable = true;
-            roomCodeInput.interactable = true;
+            SetUIInteractable(true);
         }
     }
 
     public async void JoinRoom()
     {
-        if(string.IsNullOrEmpty(roomCodeInput.text))
+        if (!PlayerJoinDataCodec.IsSupported(_selectedClass))
+        {
+            _statusText.text = "Please select a class first.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(roomCodeInput.text))
         {
             _statusText.text = "Please enter a room code.";
             return;
         }
 
-        if(roomCodeInput.text.Length < 6)
+        if (roomCodeInput.text.Length < 6)
         {
             _statusText.text = "Invalid room code";
             return;
         }
 
-        createRoomButton.interactable = false;
-        joinRoomButton.interactable = false;
-        roomCodeInput.interactable = false;
-
+        SetUIInteractable(false);
         _statusText.text = "Joining...";
 
         try
         {
             await launcher.StartSessionAsync(
                 roomCodeInput.text,
-                GameMode.Client);
+                GameMode.Client,
+                _selectedClass);
         }
         catch (Exception ex)
         {
@@ -115,10 +172,7 @@ public class MainMenuController : MonoBehaviour
         }
         else
         {
-            createRoomButton.interactable = true;
-            joinRoomButton.interactable = true;
-            roomCodeInput.interactable = true;
-
+            SetUIInteractable(true);
             _statusText.text = "";
         }
     }

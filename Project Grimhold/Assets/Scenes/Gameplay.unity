@@ -179,8 +179,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3bfaf0db7d43c7f4bb25263fb20ddba7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerSpawner
-  _playerPrefab:
-    RawGuidValue: fea3a7b256f965a4eb9b965832939741
+  _playerClassCatalog: {fileID: 11400000, guid: 7d62cc447157aaa4c97bc7cdb8855836, type: 2}
   _spawnGroups:
   - Group: 0
     SpawnPoints:
@@ -931,8 +930,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ceea6ff5186e0b54caeaa11ee3e70af0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInputReader
-  _lookSensitivity: 0.1
-  _pitchLimits: {x: -89, y: 89}
+  _worldCamera: {fileID: 519420031}
+  _aimPlaneZ: 0
 --- !u!4 &1092232369
 Transform:
   m_ObjectHideFlags: 0
