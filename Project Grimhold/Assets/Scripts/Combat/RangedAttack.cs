@@ -28,17 +28,19 @@ public sealed class RangedAttack : MonoBehaviour, IAttack
         CacheDependencies();
     }
 
-    private void Start()
-    {
-        _isValid = ValidateDependencies();
-    }
-
     private void CacheDependencies()
     {
         if (_projectileSpawnerSource != null)
         {
             _projectileSpawner = _projectileSpawnerSource as IProjectileSpawner;
         }
+    }
+
+    private bool TryInitialize()
+    {
+        CacheDependencies();
+        _isValid = ValidateDependencies();
+        return _isValid;
     }
 
     private bool ValidateDependencies()
@@ -70,46 +72,53 @@ public sealed class RangedAttack : MonoBehaviour, IAttack
     /// </summary>
     public AttackResult Execute(in AttackRequest request)
     {
-        if (!_isValid)
+        if (!_isValid && !TryInitialize())
         {
-            return AttackResult.Rejected(AttackFailureReason.MissingConfiguration);
+            return AttackResult.Rejected(
+                AttackFailureReason.MissingConfiguration);
         }
 
         // Validar dirección de ataque
         if (request.Direction.sqrMagnitude < 0.0001f)
         {
-            return AttackResult.Rejected(AttackFailureReason.InvalidDirection);
+            return AttackResult.Rejected(
+                AttackFailureReason.InvalidDirection);
         }
 
-        Vector2 normalizedDirection = request.Direction.normalized;
-        Vector2 projectileOrigin = request.Origin + normalizedDirection * _config.ProjectileSpawnOffset;
+        Vector2 normalizedDirection =
+            request.Direction.normalized;
 
-        ProjectileSpawnRequest spawnRequest = new ProjectileSpawnRequest(
-            request.AttackerId,
-            projectileOrigin,
-            normalizedDirection,
-            _config.Damage,
-            _config.DamageType,
-            _config.ProjectileSpeed,
-            _config.LifetimeSeconds,
-            _config.MaxRange,
-            request.SimulationTick
-        );
+        Vector2 projectileOrigin =
+            request.Origin +
+            normalizedDirection *
+            _config.ProjectileSpawnOffset;
 
-        ProjectileSpawnResult spawnResult = _projectileSpawner.Spawn(in spawnRequest);
+        ProjectileSpawnRequest spawnRequest =
+            new ProjectileSpawnRequest(
+                request.AttackerId,
+                projectileOrigin,
+                normalizedDirection,
+                _config.Damage,
+                _config.DamageType,
+                _config.ProjectileSpeed,
+                _config.LifetimeSeconds,
+                _config.MaxRange,
+                request.SimulationTick);
 
-        if (spawnResult.WasSpawned)
-        {
-            return AttackResult.Executed();
-        }
+        ProjectileSpawnResult spawnResult =
+            _projectileSpawner.Spawn(in spawnRequest);
 
-        return AttackResult.Rejected(AttackFailureReason.ExecutionFailed);
+        return spawnResult.WasSpawned
+            ? AttackResult.Executed()
+            : AttackResult.Rejected(
+                AttackFailureReason.ExecutionFailed);
     }
 
 #if UNITY_EDITOR
     private void OnValidate()
     {
         CacheDependencies();
+        _isValid = false;
     }
 #endif
 }

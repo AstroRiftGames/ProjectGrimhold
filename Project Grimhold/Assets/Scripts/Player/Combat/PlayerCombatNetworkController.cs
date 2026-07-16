@@ -163,7 +163,20 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
         }
 
         Vector2 originPos = _attackOrigin != null ? (Vector2)_attackOrigin.position : (Vector2)transform.position;
-        Vector2 direction = _movementController.FacingDirection;
+        Vector2 direction;
+
+        if (_activeAttack != null && _activeAttack.Type == AttackType.Ranged)
+        {
+            direction = input.AimWorldPosition - originPos;
+            if (direction.sqrMagnitude < 0.0001f)
+            {
+                direction = _movementController.FacingDirection;
+            }
+        }
+        else
+        {
+            direction = _movementController.FacingDirection;
+        }
 
         // Rechazar direcciones inválidas con magnitud prácticamente cero
         if (direction.sqrMagnitude < 0.0001f)

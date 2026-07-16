@@ -73,21 +73,6 @@ public sealed class NetworkProjectile : NetworkBehaviour
             Debug.LogError($"{nameof(NetworkProjectile)}: EntityRegistry was not found on the NetworkRunner GameObject.", this);
         }
 
-        // Ajustar escala para compensar Pixels Per Unit extremadamente alto (2048) del sprite
-        transform.localScale = new Vector3(16f, 16f, 1f);
-
-        // Ajustar el radio del CircleCollider2D en base a la escala para que su tamaño en el mundo sea el esperado (0.125 unidades)
-        if (_projectileCollider is CircleCollider2D circleCol)
-        {
-            circleCol.radius = 0.125f / 16f;
-        }
-
-        // Asegurar que se renderice por encima del fondo
-        if (TryGetComponent(out SpriteRenderer spriteRenderer))
-        {
-            spriteRenderer.sortingOrder = 10;
-        }
-
         // Alinear estado físico inicial y forzar sincronización de físicas en Unity
         if (_rigidbody != null)
         {
@@ -106,12 +91,6 @@ public sealed class NetworkProjectile : NetworkBehaviour
         if (_rigidbody == null)
         {
             _rigidbody = GetComponent<Rigidbody2D>();
-            // Configurar Rigidbody a Kinematic para simulación controlada
-            if (_rigidbody != null)
-            {
-                _rigidbody.bodyType = RigidbodyType2D.Kinematic;
-                _rigidbody.simulated = true;
-            }
         }
     }
 
@@ -125,29 +104,21 @@ public sealed class NetworkProjectile : NetworkBehaviour
         _contactFilter.SetLayerMask(new LayerMask { value = ImpactLayerMaskValue });
     }
 
-    private bool BelongsToOwner(Collider2D collider)
+    private bool TryGetValidTarget(Collider2D collider, out EntityId targetId)
     {
-        if (collider == null)
+        targetId = default;
+
+        if (collider == null || collider == _projectileCollider || _registry == null)
         {
             return false;
         }
 
-        if (collider == _projectileCollider)
-        {
-            return true;
-        }
-
-        if (_registry == null)
+        if (!_registry.TryGetEntityId(collider, out targetId))
         {
             return false;
         }
 
-        if (_registry.TryGetEntityId(collider, out EntityId entityId))
-        {
-            return entityId.Value == OwnerEntityIdValue;
-        }
-
-        return false;
+        return targetId.Value != OwnerEntityIdValue;
     }
 
     /// <summary>
@@ -223,9 +194,10 @@ public sealed class NetworkProjectile : NetworkBehaviour
         );
 
         RaycastHit2D selectHit = default;
+        EntityId selectedTargetId = default;
         bool foundValidHit = false;
 
-        // 5. Filtrar el primer impacto que no sea del propietario
+        // 5. Filtrar el primer impacto que sea un objetivo válido
         for (int i = 0; i < hitCount; i++)
         {
             RaycastHit2D hit = _hitBuffer[i];
@@ -234,14 +206,13 @@ public sealed class NetworkProjectile : NetworkBehaviour
                 continue;
             }
 
-            if (BelongsToOwner(hit.collider))
+            if (TryGetValidTarget(hit.collider, out EntityId targetId))
             {
-                continue;
+                selectHit = hit;
+                selectedTargetId = targetId;
+                foundValidHit = true;
+                break;
             }
-
-            selectHit = hit;
-            foundValidHit = true;
-            break;
         }
 
         // Limpiar el buffer localmente
@@ -262,14 +233,11 @@ public sealed class NetworkProjectile : NetworkBehaviour
                 Debug.Log($"[CombatTrace] Projectile despawned: Impact resolved on collider {selectHit.collider.name}. Distance: {selectHit.distance}, HitPoint: {selectHit.point}", this);
 
                 // Intentar aplicar daño si es una entidad dañable
-                EntityId hitEntityId = default;
-                bool isEntity = _registry != null && _registry.TryGetEntityId(selectHit.collider, out hitEntityId);
-
-                if (isEntity && _damageResolver != null)
+                if (_damageResolver != null)
                 {
                     DamageRequest damageRequest = new DamageRequest(
                         new EntityId(OwnerEntityIdValue),
-                        hitEntityId,
+                        selectedTargetId,
                         Damage,
                         DamageType,
                         Direction,

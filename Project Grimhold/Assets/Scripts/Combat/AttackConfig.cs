@@ -34,9 +34,9 @@ public abstract class AttackConfig : ScriptableObject
     /// </summary>
     protected bool TryValidateCommon(out string error)
     {
-        if (_damage < 0f)
+        if (_damage <= 0f)
         {
-            error = $"{nameof(Damage)} must be greater than or equal to zero (current: {_damage}).";
+            error = $"{nameof(Damage)} must be greater than zero (current: {_damage}).";
             return false;
         }
 
