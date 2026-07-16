@@ -71,19 +71,17 @@ Generates physical projectiles that traverse the world:
 * Delegates spawning requests to an `IProjectileSpawner` instance.
 
 ### 5. Projectile Simulation (`NetworkProjectile`)
-
 Represents a networked projectile whose gameplay simulation is executed exclusively by State Authority.
-
-- **Authority-only simulation**: Movement, collision queries, damage resolution, range validation, lifetime expiration, and despawn decisions occur only on State Authority. Proxy instances receive replicated state for presentation.
-- **Kinematic movement**: Uses a kinematic `Rigidbody2D` and advances using `Runner.DeltaTime`, avoiding non-authoritative collision responses or forces.
-- **Continuous collision detection**: Casts the projectile's collider across the requested tick displacement so targets cannot be skipped between ticks.
-- **Physical initialization**: Aligns the Rigidbody2D, Transform, and networked spawn position before the first authoritative simulation step.
-- **Physics synchronization**: When required by manually updated transforms, synchronizes the Unity 2D physics state before performing the collider cast.
-- **Owner filtering**: Resolves hit colliders through `EntityRegistry` and ignores every collider associated with the projectile owner while continuing to evaluate subsequent hits.
-- **Single-impact guarantee**: Consumes an accepted impact before applying damage or requesting despawn, preventing duplicated damage across subsequent ticks or multiple overlapping cast results.
-- **Range and lifetime**: Tracks the exact traveled distance and a network `TickTimer`. The final movement step is clamped so the projectile never exceeds its configured maximum range.
-- **Obstacle behavior**: A collider without a registered damageable entity still blocks and despawns the projectile but does not produce a damage request. A wall blocks/despawns the projectile without damage.
-- **Collision volume**: The projectile prefab defines a gameplay collider whose effective world-space size is independent from unintended visual scaling. The current implementation validates or adjusts the CircleCollider2D radius during initialization to prevent prefab scale from producing an oversized world-space collision volume.
+* **Authority-only simulation**: Movement, collision queries, damage resolution, range validation, lifetime expiration, and despawn decisions occur only on State Authority. Proxy instances receive replicated state for presentation.
+* **Kinematic movement**: Uses a kinematic `Rigidbody2D` and advances using `Runner.DeltaTime`, avoiding non-authoritative collision responses or forces.
+* **Continuous collision detection**: Casts the projectile's collider across the requested tick displacement so targets cannot be skipped between ticks.
+* **Physical initialization**: Aligns the Rigidbody2D, Transform, and networked spawn position before the first authoritative simulation step.
+* **Physics synchronization**: When required by manually updated transforms, synchronizes the Unity 2D physics state before performing the collider cast.
+* **Owner filtering**: Resolves hit colliders through `EntityRegistry` and ignores every collider associated with the projectile owner while continuing to evaluate subsequent hits.
+* **Single-impact guarantee**: Consumes an accepted impact before applying damage or requesting despawn, preventing duplicated damage across subsequent ticks or multiple overlapping cast results.
+* **Range and lifetime**: Tracks the exact traveled distance and a network `TickTimer`. The final movement step is clamped so the projectile never exceeds its configured maximum range.
+* **Obstacle behavior**: A collider without a registered damageable entity still blocks and despawns the projectile but does not produce a damage request. A wall blocks/despawns the projectile without damage.
+* **Collision volume**: The projectile prefab defines a gameplay collider whose effective world-space size is independent from unintended visual scaling. The current implementation validates or adjusts the CircleCollider2D radius during initialization to prevent prefab scale from producing an oversized world-space collision volume.
 
 ### 6. Entity Identity (`EntityRegistry`)
 A fast-lookup database mapping physical colliders (`Collider2D`) to gameplay entity identities (`EntityId`) and damageable contracts (`IDamageable`):
@@ -92,35 +90,207 @@ A fast-lookup database mapping physical colliders (`Collider2D`) to gameplay ent
 
 ---
 
-## Network Authority Model
+## Implementation Status
 
-| System Layer | Execution Authority | Execution Model | Transport / Replication |
+| Component | Status | Responsibility | Notes |
 | :--- | :--- | :--- | :--- |
-| **Input Capture** | Input Authority | Local input collection | Fusion Input Transport |
-| **Attack Validation** | State Authority | Authoritative tick processing | Fusion simulation input |
-| **Cooldowns / Timers** | State Authority | Deterministic tick-based state | Networked properties |
-| **Projectile Spawning** | State Authority | Authoritative spawn | `Runner.TrySpawn` |
-| **Projectile Simulation** | State Authority | Authority-only tick simulation | Networked transform state |
-| **Damage Resolution** | State Authority | Authority-only resolution | Direct host-side method call |
+| **`PlayerInputReader`** | Fully Implemented | Captures local buttons/aim and packs into `PlayerNetworkInput`. | Relies on local Unity input wrappers. |
+| **`PlayerCombatNetworkController`** | Fully Implemented | Handles network input collection, TickTimer cooldowns, and strategies. | Requires inspector assignment of characters & strategies. |
+| **`MeleeAttack`** | Fully Implemented | Melee execution strategy, queries targets, resolves damage. | Fully data-driven by `MeleeAttackConfig`. |
+| **`Physics2DAttackTargetQuery`** | Fully Implemented | Circular target query with `Physics2D.OverlapCircle`. | Uses `_colliderBuffer` to avoid heap allocations. |
+| **`RangedAttack`** | Fully Implemented | Ranged execution strategy, spawns projectile via `IProjectileSpawner`. | Translates input to `ProjectileSpawnRequest`. |
+| **`FusionProjectileSpawner`** | Fully Implemented | Replicated network spawning via `Runner.TrySpawn`. | State Authority validated. |
+| **`NetworkProjectile`** | Fully Implemented | Replicated kinematic projectile movement and casting queries. | Uses `ImpactConsumed` state to guarantee single damage. |
+| **`DamageResolver`** | Fully Implemented | Route `DamageRequest` to target and returns `DamageResult`. | Resolves target from `EntityRegistry`. |
+| **`EntityRegistry`** | Fully Implemented | Shared registry mapping `Collider2D` to `EntityId` and `IDamageable`. | Must be present on the same GameObject as the NetworkRunner. |
+| **`CharacterBase`** | Fully Implemented | Base abstract character class handling health and damage resolution. | Inherited by players and enemies. |
 
 ---
 
-## Physics and Synchronization Rules
+## Combat Configuration
 
-1. **Authoritative Physics**  
-   Only State Authority may move gameplay projectiles, select impacts, apply damage, or despawn them. Proxies never apply damage.
+Gameplay properties are separated into stable configurations and dynamic network state:
 
-2. **Physics State Alignment**  
-   The Transform, Rigidbody2D, networked spawn position, and collider query origin must represent the same world-space position before the first cast.
+### 1. `MeleeAttackConfig` (ScriptableObject)
+Inherits from `AttackConfig`. Validated fields:
+* **`_damage`** (float, Min: 0.0): The base damage applied on hit.
+* **`_damageType`** (DamageType): Physical, Magical, etc.
+* **`_cooldownSeconds`** (float, Min: 0.0): Minimum seconds between attacks.
+* **`_inputMode`** (AttackInputMode): Press or Hold.
+* **`_range`** (float, Min: 0.1): Spatial offset of the detection circle's center from the attacker origin.
+* **`_radius`** (float, Min: 0.1): Detection circle radius.
+* **`_maximumTargets`** (int, Min: 1): Maximum number of targets hit in one execute.
+* **`_targetLayerMask`** (LayerMask): Layer mask defining which objects are queried.
 
-3. **Explicit Synchronization**  
-   When transforms are changed manually and a physics query must observe those changes in the same simulation step, synchronize the 2D physics state before running the query. Avoid unnecessary global synchronization calls.
+### 2. `RangedAttackConfig` (ScriptableObject)
+Inherits from `AttackConfig`. Validated fields:
+* **`_damage`** (float, Min: 0.0): The base damage applied on hit.
+* **`_damageType`** (DamageType): Damage type.
+* **`_cooldownSeconds`** (float, Min: 0.0): Cooldown between shots.
+* **`_inputMode`** (AttackInputMode): Press or Hold.
+* **`_projectileSpeed`** (float, Min: 0.1): Travel speed of the spawned projectile.
+* **`_lifetimeSeconds`** (float, Min: 0.1): Duration before projectile expires.
+* **`_maxRange`** (float, Min: 0.1): Maximum physical distance the projectile can travel.
+* **`_projectileSpawnOffset`** (float, Min: 0.0): Distance in front of the attacker origin where the projectile spawns.
+* **`_projectilePrefab`** (NetworkPrefabRef): Fusion registered prefab reference.
+* **`_impactLayerMask`** (LayerMask): Collision mask including both target characters and blocking obstacle walls.
 
-4. **Owner Filtering**  
-   Resolve ownership through `EntityId` and `EntityRegistry`. Do not infer ownership from tags, layers, prefab names, or hierarchy names.
+---
 
-5. **Valid Cast Results**  
-   Process only the number of results returned by the physics query. Ignore owner colliders and continue searching for the closest valid blocking hit.
+## Melee Attack Flow
 
-6. **Configured Collision Volume**  
-   Projectile collider size and spawn offset must be based on gameplay collision requirements rather than the apparent size of the rendered sprite.
+1. **Input Collection**: `PlayerInputReader` latches primary attack input.
+2. **Transport**: `PlayerNetworkInput` transports buttons to `FixedUpdateNetwork` via Fusion.
+3. **Trigger**: `PlayerCombatNetworkController` processes input. On press/hold, it validates `AttackCooldown` (TickTimer) and character alive state.
+4. **Execution**: If authorized and ready, calls `MeleeAttack.Execute(in AttackRequest)`.
+5. **Direction**: The attack direction is determined by `PlayerMovementNetworkController.FacingDirection`.
+6. **Query Targets**: `MeleeAttack` delegates queries to `Physics2DAttackTargetQuery.FindTargets()`.
+   * Center is computed as: `Origin + FacingDirection * Range`.
+   * Targets are queried within `Radius` using `Physics2D.OverlapCircle` with a non-allocating buffer.
+7. **Deduplication and Exclusion**:
+   * Attacker's own `EntityId` is excluded.
+   * Targets not registered in the `EntityRegistry`, dead, or invulnerable are ignored.
+   * Overlapping colliders belonging to the same entity are deduplicated (preserving only the closest hit point).
+8. **Damage Request**: For each candidate target up to `MaximumTargets` (sorted by distance), a `DamageRequest` is built and passed to `IDamageResolver.Resolve()`.
+
+---
+
+## Ranged Attack Flow
+
+1. **Input Collection**: `PlayerInputReader` reads primary attack button and mouse world position `AimWorldPosition`.
+2. **Trigger**: `PlayerCombatNetworkController` evaluates the input.
+   * If aiming too close to the origin, it defaults the shoot direction to `FacingDirection`.
+3. **Execution**: If ready, calls `RangedAttack.Execute(in AttackRequest)`.
+4. **Build Request**: `RangedAttack` calculates origin using `SpawnOffset` along the normalized direction and builds `ProjectileSpawnRequest`.
+5. **Spawn**: `RangedAttack` calls `IProjectileSpawner.Spawn()`.
+6. **Spawner Validation**: `FusionProjectileSpawner` runs only under State Authority. It validates its configs and executes `Runner.TrySpawn()`.
+7. **Pre-initialization**: In the `onBeforeSpawned` callback of `TrySpawn`, `NetworkProjectile.InitializeNetworkState()` is invoked to setup the networked variables before replication.
+8. **Kinematic Simulation**: `NetworkProjectile` updates in `FixedUpdateNetwork`:
+   * Checks `LifetimeTimer` expiration.
+   * Moves transform and Rigidbody2D based on `Direction * Speed * DeltaTime`.
+   * Clamps final step if remaining range is exceeded.
+9. **Collision Casting**: Casts the projectile collider shape along its displacement vector (`Collider2D.Cast`) using `ImpactLayerMask`.
+10. **Target/Obstacle Resolution**:
+    * Hits are queried against `EntityRegistry`.
+    * Projectile owner colliders are ignored.
+    * If a valid damageable hit is found under State Authority:
+      * Projectile is aligned to the hit contact point.
+      * `ImpactConsumed` is set to `true` (guaranteeing one-time damage).
+      * `DamageRequest` is dispatched to `IDamageResolver`.
+      * Spawner despawns the projectile via `Runner.Despawn()`.
+    * If a blocking obstacle (wall) is hit, the projectile despawns without damage.
+
+---
+
+## Damage Pipeline
+
+```text
+DamageRequest ──► IDamageResolver ──► IDamageable (ApplyDamage) ──► DamageResult
+```
+
+### 1. `DamageRequest` & `DamageResult`
+* **`DamageRequest`**: A plain C# struct transporting attacker ID, target ID, base damage amount, damage type, direction, hit point, and execution tick.
+* **`DamageResult`**: Communicates target ID, execution success, damage amount applied, remaining health, fatal flag, and detailed failure reason.
+
+### 2. `DamageResolver`
+A network component that validates damage rules:
+* Prevents self-damage: returns `SelfDamageRejected` if target ID matches attacker ID.
+* Queries target `IDamageable` from the `EntityRegistry`.
+* Excludes targets that cannot receive damage or are dead.
+* Calls `IDamageable.ApplyDamage()` on the target.
+
+### 3. Entity Registration (`EntityRegistry` & `CharacterBase`)
+* Any damageable character must inherit from `CharacterBase` (which implements `IDamageable` and `ICharacter`).
+* On `Spawned()`, characters retrieve the runner's `EntityRegistry` and invoke `TryRegister()`, mapping their unique `EntityId` to the `IDamageable` instance and mapping all child `Collider2D` components to the `EntityId`.
+* On `Despawned()`, they call `Unregister()` to remove these references.
+* This ensures that multiple colliders representing a single character map to the exact same `EntityId`, preventing duplicate target selection or double-damage evaluations in a single query.
+
+---
+
+## Prefab and Asset Dependencies
+
+### 1. Player Prefab
+* Must contain:
+  * **`PlayerCombatNetworkController`**:
+    * `_characterSource` -> Reference to `PlayerCharacter` or character component.
+    * `_attackOrigin` -> Transform indicating weapon output position.
+    * `_activeAttackSource` -> Reference to active strategy component (`MeleeAttack` or `RangedAttack`).
+    * `_movementController` -> Reference to `PlayerMovementNetworkController`.
+  * **`MeleeAttack`** & **`RangedAttack`** strategies.
+  * **`Physics2DAttackTargetQuery`** & **`FusionProjectileSpawner`** dependencies.
+
+### 2. Projectile Prefab (e.g. `Arrow.prefab`)
+* Must contain:
+  * **`NetworkObject`** & **`NetworkTransform`**.
+  * **`Rigidbody2D`** (Kinematic, Simulated).
+  * **`Collider2D`** (Trigger recommended, configured on Projectile layer).
+  * **`NetworkProjectile`** script with assigned references.
+* Must be registered in the **Network Project Settings** under Fusion's prefab catalog.
+
+### 3. Enemy Melee Prefab
+* Must contain:
+  * A component deriving from `CharacterBase` (e.g. implementing health and `IDamageable`).
+  * Collider components (on a layer included in combat masks).
+
+### 4. Configuration Assets
+* **`MeleeAttackConfig`** asset: Saved as a scriptable object, referenced in the character's `MeleeAttack` component.
+* **`RangedAttackConfig`** asset: Saved as a scriptable object, referenced in `RangedAttack` and `FusionProjectileSpawner` components.
+
+---
+
+## Acceptance Criteria Matrix
+
+| Criterion | Status | Code Evidence | Manual Validation Required |
+| :--- | :--- | :--- | :--- |
+| **Authorized attack execution** | Implemented | [PlayerCombatNetworkController.cs:L116-124](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Player/Combat/PlayerCombatNetworkController.cs#L116-L124) | Yes (validate host-only decisions) |
+| **Configurable cooldown** | Implemented | [PlayerCombatNetworkController.cs:L200-208](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Player/Combat/PlayerCombatNetworkController.cs#L200-L208) | Yes (validate with modified configs) |
+| **Correct attack direction** | Implemented | [PlayerCombatNetworkController.cs:L165-188](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Player/Combat/PlayerCombatNetworkController.cs#L165-L188) | Yes (verify mouse aim vs facing fallback) |
+| **Valid target filtering** | Implemented | [Physics2DAttackTargetQuery.cs:L97-113](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/Physics2DAttackTargetQuery.cs#L97-L113) | Yes (verify against non-damageable layers) |
+| **Attacker and owner exclusion** | Implemented | [Physics2DAttackTargetQuery.cs:L91-95](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/Physics2DAttackTargetQuery.cs#L91-L95) / [NetworkProjectile.cs:L121](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/NetworkProjectile.cs#L121) | Yes (verify projectile ignores owner) |
+| **One damage application per target/projectile** | Implemented | [MeleeAttack.cs:L163-167](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/MeleeAttack.cs#L163-L167) / [NetworkProjectile.cs:L224-226](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/NetworkProjectile.cs#L224-L226) | Yes (confirm no double-damage on walls/enemies) |
+| **Authoritative projectile spawn** | Implemented | [FusionProjectileSpawner.cs:L45-50](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/FusionProjectileSpawner.cs#L45-L50) | Yes (client-side execution check) |
+| **Synchronized projectile observation** | Implemented | Spawns via network-replicated Fusion object. | Yes (visible on remote proxies) |
+| **Configurable speed and lifetime** | Implemented | [RangedAttackConfig.cs:L10-14](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/RangedAttackConfig.cs#L10-L14) | Yes (verify values change projectile behavior) |
+| **Lifetime and range despawn** | Implemented | [NetworkProjectile.cs:L161-179](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/NetworkProjectile.cs#L161-L179) | Yes (verify ranges/durations) |
+| **Shared damage pipeline** | Implemented | [DamageResolver.cs](file:///c:/Users/Dani/OneDrive/Documentos/GitHub/ProjectGrimhold/Project%20Grimhold/Assets/Scripts/Combat/DamageResolver.cs) | Yes (verify damage application logs) |
+| **Enemy melee damage integration** | Implemented | Evaluates `IDamageable` registered from `CharacterBase`. | Yes (verify enemy health reduction) |
+| **Independence from animation playback** | Implemented | Simulation executes entirely in `FixedUpdateNetwork` tick loops. | Yes (test with empty animation parameters) |
+| **No player/enemy-specific logic in core** | Implemented | Systems interact strictly via interface models. | Yes |
+
+---
+
+## Known Limitations and Technical Debt
+
+* **Layer Configuration Dependency**: The system requires strict layer separation. If targets or obstacles are not on the correct layers specified in `MeleeAttackConfig` and `RangedAttackConfig`, collision queries will fail to report hits.
+* **Component Casting**: Strategies (`MeleeAttack` and `RangedAttack`) rely on `MonoBehaviour` fields cast to interface references at runtime, which requires careful assignment in the Inspector. Missing component assignments on the prefab will lead to validation errors.
+
+---
+
+## Manual Validation Guide
+
+For thorough multi-peer validation, configure two instances (Host and Client) and follow these steps:
+
+### 1. Melee Combat Test
+* **Setup**: Place an Enemy Melee prefab within the scene. Spawn a Player character.
+* **Action**: Execute a melee attack while facing the Enemy.
+* **Expected Result**: The combat controller triggers target search. Enemy takes damage as shown in host simulation logs. Local gizmo outline correctly overlaps target.
+
+### 2. Ranged Projectile Combat Test
+* **Setup**: Deploy Player and Enemy.
+* **Action**: Perform ranged attack targeting the Enemy.
+* **Expected Result**: Projectile spawns at configured offset. It travels at defined speed, detects the Enemy collider, inflicts damage, and despawns immediately on impact. Projectile is visible on both Host and Client viewports.
+
+### 3. Obstacle Collision Test
+* **Setup**: Place a wall obstacle (with static collider) on the impact layer.
+* **Action**: Fire a projectile directly at the wall.
+* **Expected Result**: Projectile travels and despawns instantly on wall contact. No damage request is generated.
+
+### 4. Range & Lifetime Expiration Test
+* **Setup**: Fire a projectile into open space.
+* **Action**: Observe projectile travel.
+* **Expected Result**: Projectile despawns automatically when either travel distance exceeds `MaxRange` or duration exceeds `LifetimeSeconds`.
+
+### 5. Client Authority Verification
+* **Setup**: Launch Client instance.
+* **Action**: Force Client to trigger `IProjectileSpawner.Spawn` directly.
+* **Expected Result**: Spawner rejects command immediately due to missing `HasStateAuthority` validation check.

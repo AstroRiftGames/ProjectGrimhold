@@ -2,17 +2,17 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Estrategia concreta de ataque cuerpo a cuerpo (Melee).
-/// Utiliza IAttackTargetQuery para consultar objetivos físicamente y IDamageResolver para aplicar daño.
+/// Concrete strategy for melee attacks.
+/// Uses IAttackTargetQuery to query targets spatially and IDamageResolver to apply damage.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class MeleeAttack : MonoBehaviour, IAttack
 {
-    [Header("Configuración")]
+    [Header("Configuration")]
     [SerializeField]
     private MeleeAttackConfig _config;
 
-    [Header("Componentes de Soporte")]
+    [Header("Support Components")]
     [SerializeField]
     private MonoBehaviour _targetQuerySource;
 
@@ -46,7 +46,7 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
     }
 
     /// <summary>
-    /// Inicializa de forma explícita las dependencias para pruebas o instanciación dinámica.
+    /// Explicitly initializes dependencies for testing or dynamic instantiation.
     /// </summary>
     public void Initialize(MeleeAttackConfig config, IAttackTargetQuery targetQuery, IDamageResolver damageResolver)
     {
@@ -105,7 +105,7 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
     }
 
     /// <summary>
-    /// Ejecuta de manera autoritativa la estrategia del ataque melee.
+    /// Executes the melee attack strategy authoritatively on the State Authority.
     /// </summary>
     public AttackResult Execute(in AttackRequest request)
     {
@@ -123,16 +123,16 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
             return AttackResult.Rejected(AttackFailureReason.MissingConfiguration);
         }
 
-        // Validar dirección de ataque
+        // Validate attack direction
         if (request.Direction.sqrMagnitude < 0.0001f)
         {
             return AttackResult.Rejected(AttackFailureReason.InvalidDirection);
         }
 
-        // Limpiar el buffer al inicio de cada ejecución
+        // Clear the buffer at the start of each execution
         _tempProcessedIds.Clear();
 
-        // 1. Construir la consulta de objetivos (con dirección normalizada)
+        // 1. Build the target query (with normalized direction)
         AttackTargetQuery targetQuery = new AttackTargetQuery(
             request.AttackerId,
             request.Origin,
@@ -143,10 +143,10 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
             _config.TargetLayerMask.value
         );
 
-        // 2. Realizar la consulta espacial
+        // 2. Perform spatial query
         var targets = _targetQuery.FindTargets(in targetQuery);
 
-        // 3. Generar y delegar solicitudes de daño para cada objetivo único deduplicado
+        // 3. Generate and delegate damage requests for each unique deduplicated target
         int targetsCount = 0;
         if (targets != null)
         {
@@ -154,19 +154,19 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
             {
                 var target = targets[i];
 
-                // Ignorar al atacante por ID
+                // Exclude the attacker by ID
                 if (target.TargetId == request.AttackerId)
                 {
                     continue;
                 }
 
-                // Deduplicar antes de aplicar el límite y antes de aplicar daño
+                // Deduplicate before applying the limit and before applying damage
                 if (!_tempProcessedIds.Add(target.TargetId))
                 {
                     continue;
                 }
 
-                // Generar solicitud de daño
+                // Generate damage request
                 DamageRequest damageRequest = new DamageRequest(
                     request.AttackerId,
                     target.TargetId,
@@ -177,7 +177,7 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
                     request.SimulationTick
                 );
 
-                // No dependemos del resultado de Resolve para decidir si el ataque fue ejecutado
+                // We do not depend on the Resolve result to decide if the attack was executed
                 _damageResolver.Resolve(in damageRequest);
 
                 targetsCount++;
@@ -188,10 +188,10 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
             }
         }
 
-        // Limpiar para no almacenar objetivos entre ejecuciones
+        // Clear to avoid holding targets between executions
         _tempProcessedIds.Clear();
 
-        // Un ataque melee sin objetivos, o cuyos objetivos rechazan el daño, sigue siendo un ataque ejecutado.
+        // A melee attack without targets, or whose targets reject the damage, is still considered successfully executed.
         return AttackResult.Executed();
     }
 

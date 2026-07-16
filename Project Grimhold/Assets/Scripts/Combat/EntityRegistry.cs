@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Registro de entidades asociativas para un NetworkRunner.
-/// Mapea de manera eficiente de EntityId a IDamageable y de Collider2D a EntityId
-/// sin incurrir en GetComponent en loops de simulación de combate.
+/// Associative entity registry for a NetworkRunner.
+/// Maps efficiently from EntityId to IDamageable and from Collider2D to EntityId
+/// without incurring GetComponent calls in combat simulation loops.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class EntityRegistry : MonoBehaviour
@@ -13,7 +13,7 @@ public sealed class EntityRegistry : MonoBehaviour
     private readonly Dictionary<Collider2D, EntityId> _colliders = new();
 
     /// <summary>
-    /// Intenta registrar una entidad y sus colliders asociados.
+    /// Attempts to register an entity and its associated colliders.
     /// </summary>
     public bool TryRegister(EntityId id, IDamageable damageable, IReadOnlyList<Collider2D> colliders)
     {
@@ -40,7 +40,7 @@ public sealed class EntityRegistry : MonoBehaviour
     }
 
     /// <summary>
-    /// Remueve una entidad y sus colliders asociados.
+    /// Removes an entity and its associated colliders from the registry.
     /// </summary>
     public void Unregister(EntityId id, IReadOnlyList<Collider2D> colliders)
     {
@@ -60,7 +60,7 @@ public sealed class EntityRegistry : MonoBehaviour
     }
 
     /// <summary>
-    /// Intenta recuperar una entidad dañable mediante su EntityId.
+    /// Attempts to retrieve a damageable entity by its EntityId.
     /// </summary>
     public bool TryGetDamageable(EntityId id, out IDamageable damageable)
     {
@@ -68,7 +68,7 @@ public sealed class EntityRegistry : MonoBehaviour
     }
 
     /// <summary>
-    /// Intenta recuperar el EntityId al cual pertenece un Collider2D.
+    /// Attempts to retrieve the EntityId that owns a given Collider2D.
     /// </summary>
     public bool TryGetEntityId(Collider2D collider, out EntityId id)
     {

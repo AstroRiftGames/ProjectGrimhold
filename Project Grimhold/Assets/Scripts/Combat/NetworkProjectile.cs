@@ -2,9 +2,9 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Componente de red responsable de la simulación del proyectil.
-/// Realiza el movimiento cinemático, la detección de colisiones mediante su propio volumen
-/// y aplica daño autoritativo bajo State Authority en <see cref="FixedUpdateNetwork"/>.
+/// Network component responsible for projectile simulation.
+/// Handles kinematic movement, collision detection using its own collider volume,
+/// and applies authoritative damage under State Authority in <see cref="FixedUpdateNetwork"/>.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(NetworkTransform))]
@@ -12,7 +12,7 @@ using UnityEngine;
 [RequireComponent(typeof(Collider2D))]
 public sealed class NetworkProjectile : NetworkBehaviour
 {
-    [Header("Componentes Locales")]
+    [Header("Local Components")]
     [SerializeField]
     private Collider2D _projectileCollider;
 
@@ -73,7 +73,7 @@ public sealed class NetworkProjectile : NetworkBehaviour
             Debug.LogError($"{nameof(NetworkProjectile)}: EntityRegistry was not found on the NetworkRunner GameObject.", this);
         }
 
-        // Alinear estado físico inicial y forzar sincronización de físicas en Unity
+        // Align physical starting state and force Unity physics synchronization
         if (_rigidbody != null)
         {
             _rigidbody.position = transform.position;
@@ -99,7 +99,7 @@ public sealed class NetworkProjectile : NetworkBehaviour
         _contactFilter = new ContactFilter2D
         {
             useLayerMask = true,
-            useTriggers = true // Permitir interactuar con triggers según lógica de la máscara
+            useTriggers = true // Allow interacting with triggers based on configured layer mask
         };
         _contactFilter.SetLayerMask(new LayerMask { value = ImpactLayerMaskValue });
     }
@@ -122,8 +122,8 @@ public sealed class NetworkProjectile : NetworkBehaviour
     }
 
     /// <summary>
-    /// Inicializa las propiedades de red del proyectil antes de completarse el spawn.
-    /// Solo puede invocarse desde el callback de inicialización del spawner en la State Authority.
+    /// Initializes network properties of the projectile prior to spawning completing.
+    /// Can only be called during the initialization callback of the spawner on the State Authority.
     /// </summary>
     public void InitializeNetworkState(in ProjectileSpawnRequest request, int impactLayerMaskValue)
     {
@@ -143,7 +143,7 @@ public sealed class NetworkProjectile : NetworkBehaviour
     }
 
     /// <summary>
-    /// Asigna las dependencias locales requeridas en tiempo de ejecución.
+    /// Assigns required runtime dependencies.
     /// </summary>
     public void SetRuntimeDependencies(IDamageResolver damageResolver)
     {
@@ -152,13 +152,13 @@ public sealed class NetworkProjectile : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        // Ejecutar simulación de gameplay únicamente bajo State Authority
+        // Execute gameplay simulation exclusively under State Authority
         if (!HasStateAuthority)
         {
             return;
         }
 
-        // 1. Validar expiración por lifetime
+        // 1. Validate expiration by lifetime
         if (LifetimeTimer.ExpiredOrNotRunning(Runner))
         {
             Debug.Log($"[CombatTrace] Projectile despawned: Lifetime expired.", this);
@@ -166,24 +166,24 @@ public sealed class NetworkProjectile : NetworkBehaviour
             return;
         }
 
-        // 2. Calcular distancia acumulada y rango disponible
+        // 2. Calculate accumulated distance and remaining range
         Vector2 currentPosition = _rigidbody.position;
         float traveledDistance = Vector2.Distance(SpawnPosition, currentPosition);
         float remainingRange = MaximumRange - traveledDistance;
 
         if (remainingRange <= 0f)
         {
-            Debug.Log($"[CombatTrace] Projectile despawned: Range limit exceeded (traveled: {traveledDistance}, max: {MaximumRange}).", this);
+            Debug.Log($"[CombatTrace] Projectile despawned: Range limit exceeded (travelled: {traveledDistance}, max: {MaximumRange}).", this);
             Runner.Despawn(Object);
             return;
         }
 
-        // 3. Determinar distancia a avanzar en este tick
+        // 3. Determine distance to travel in this tick
         float requestedDistance = Speed * Runner.DeltaTime;
         bool reachesMaximumRange = requestedDistance >= remainingRange;
         float travelDistance = Mathf.Min(requestedDistance, remainingRange);
 
-        // 4. Realizar el cast utilizando el volumen real del proyectil
+        // 4. Perform collider cast using the projectile's real collision volume
         Physics2D.SyncTransforms();
 
         int hitCount = _projectileCollider.Cast(
@@ -197,7 +197,7 @@ public sealed class NetworkProjectile : NetworkBehaviour
         EntityId selectedTargetId = default;
         bool foundValidHit = false;
 
-        // 5. Filtrar el primer impacto que sea un objetivo válido
+        // 5. Filter for the first valid target impact
         for (int i = 0; i < hitCount; i++)
         {
             RaycastHit2D hit = _hitBuffer[i];
@@ -215,24 +215,24 @@ public sealed class NetworkProjectile : NetworkBehaviour
             }
         }
 
-        // Limpiar el buffer localmente
+        // Clear the local hit buffer
         System.Array.Clear(_hitBuffer, 0, hitCount);
 
-        // 6. Procesar el impacto o mover el proyectil
+        // 6. Process impact or move the projectile forward
         if (foundValidHit)
         {
             if (!ImpactConsumed)
             {
                 ImpactConsumed = true;
 
-                // Mover el proyectil al punto de colisión exacto respetando el volumen
+                // Move projectile to exact collision point, respecting its volume
                 Vector2 impactPosition = currentPosition + Direction * selectHit.distance;
                 _rigidbody.position = impactPosition;
                 transform.position = impactPosition;
 
                 Debug.Log($"[CombatTrace] Projectile despawned: Impact resolved on collider {selectHit.collider.name}. Distance: {selectHit.distance}, HitPoint: {selectHit.point}", this);
 
-                // Intentar aplicar daño si es una entidad dañable
+                // Attempt to apply damage if target is a damageable entity
                 if (_damageResolver != null)
                 {
                     DamageRequest damageRequest = new DamageRequest(
@@ -253,12 +253,12 @@ public sealed class NetworkProjectile : NetworkBehaviour
         }
         else
         {
-            // Movimiento normal sin colisiones detectadas
+            // Normal movement without collisions detected
             Vector2 nextPosition = currentPosition + Direction * travelDistance;
             _rigidbody.position = nextPosition;
             transform.position = nextPosition;
 
-            // Despawnear si se alcanzó el límite exacto del alcance en este tick
+            // Despawn if maximum range is reached in this tick
             if (reachesMaximumRange)
             {
                 Debug.Log($"[CombatTrace] Projectile despawned: Reached exact maximum range.", this);

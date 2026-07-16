@@ -4,19 +4,19 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Implementación basada en Physics2D y el EntityRegistry de la consulta de objetivos.
+/// Implementation of IAttackTargetQuery based on Physics2D and EntityRegistry.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTargetQuery
 {
-    [Header("Configuración de Rendimiento")]
+    [Header("Performance Configuration")]
     [SerializeField]
     private int _colliderBufferSize = 64;
 
     private Collider2D[] _colliderBuffer;
     private EntityRegistry _registry;
 
-    // Estructura interna para realizar la deduplicación y el ordenamiento sin asignaciones de memoria
+    // Internal struct to perform deduplication and sorting without allocations
     private struct CandidateTarget
     {
         public EntityId Id;
@@ -44,8 +44,8 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
     }
 
     /// <summary>
-    /// Consulta los objetivos dentro del área circular del ataque melee.
-    /// Deduplica por EntityId, ordena por distancia al origen y limita a MaximumTargets.
+    /// Queries targets inside the melee attack circular area.
+    /// Deduplicates by EntityId, sorts by distance to the origin, and limits to MaximumTargets.
     /// </summary>
     public IReadOnlyList<AttackTarget> FindTargets(in AttackTargetQuery query)
     {
@@ -58,11 +58,11 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
 
         Vector2 attackCenter = query.Origin + query.Direction * query.Range;
 
-        // Configuración de filtro para OverlapCircle
+        // Filter configuration for OverlapCircle
         ContactFilter2D filter = new ContactFilter2D();
         filter.useLayerMask = true;
         filter.SetLayerMask(query.TargetLayerMask);
-        filter.useTriggers = true; // Permitimos triggers o colliders según se configure
+        filter.useTriggers = true; // Allow trigger colliders based on configuration
 
         int hitCount = Physics2D.OverlapCircle(
             attackCenter,
@@ -82,42 +82,42 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
                 continue;
             }
 
-            // Recuperar EntityId a través del registro (sin búsquedas globales)
+            // Retrieve EntityId from registry (avoiding global component searches)
             if (!_registry.TryGetEntityId(col, out EntityId targetId))
             {
                 continue;
             }
 
-            // Excluir al atacante
+            // Exclude the attacker
             if (targetId == query.AttackerId)
             {
                 continue;
             }
 
-            // Obtener el IDamageable para validar estado vital y disponibilidad de daño
+            // Retrieve IDamageable to validate alive status and damage availability
             if (!_registry.TryGetDamageable(targetId, out IDamageable damageable))
             {
                 continue;
             }
 
-            // Excluir si no puede recibir daño
+            // Exclude if cannot receive damage
             if (!damageable.CanReceiveDamage)
             {
                 continue;
             }
 
-            // Excluir entidades muertas (ICharacter)
+            // Exclude dead characters
             if (damageable is ICharacter character && !character.IsAlive)
             {
                 continue;
             }
 
-            // Punto de impacto: punto más cercano al origen del ataque en el collider
+            // Hit point: closest point to the attack origin on the collider
             Vector2 hitPoint = col.ClosestPoint(query.Origin);
 
             float sqrDistance = (hitPoint - query.Origin).sqrMagnitude;
 
-            // Deduplicar antes de ordenar: conservar el hit más cercano por EntityId
+            // Deduplicate before sorting: retain the closest hit per EntityId
             if (_entityIdToCandidateIndex.TryGetValue(targetId, out int existingIndex))
             {
                 if (sqrDistance < _candidates[existingIndex].SqrDistance)
@@ -144,7 +144,7 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
             }
         }
 
-        // Limpiar el buffer de colliders procesados
+        // Clear the processed colliders buffer
         Array.Clear(_colliderBuffer, 0, hitCount);
         _entityIdToCandidateIndex.Clear();
 
@@ -153,11 +153,11 @@ public sealed class Physics2DAttackTargetQuery : NetworkBehaviour, IAttackTarget
             return _results;
         }
 
-        // Ordenamiento por menor distancia cuadrada al origen. Desempate estable usando EntityId.
-        // Ordenamos solo después de procesar y deduplicar todos los colliders.
+        // Sort by closest squared distance to origin. Stable tie-break using EntityId.
+        // We only sort after processing and deduplicating all hits.
         _candidates.Sort(CompareCandidates);
 
-        // Limitar la cantidad máxima de objetivos seleccionados después de ordenar candidatos únicos
+        // Limit maximum selected target count after candidate deduplication and sorting
         int targetsToTake = Mathf.Min(_candidates.Count, query.MaximumTargets);
         for (int i = 0; i < targetsToTake; i++)
         {

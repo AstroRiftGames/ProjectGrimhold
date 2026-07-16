@@ -1,18 +1,18 @@
 using UnityEngine;
 
 /// <summary>
-/// Estrategia concreta de ataque a distancia (Ranged).
-/// Traduce un <see cref="AttackRequest"/> en un <see cref="ProjectileSpawnRequest"/>
-/// y delega la creación al spawner de proyectiles.
+/// Concrete strategy for ranged attacks.
+/// Translates an <see cref="AttackRequest"/> into a <see cref="ProjectileSpawnRequest"/>
+/// and delegates creation to the projectile spawner.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class RangedAttack : MonoBehaviour, IAttack
 {
-    [Header("Configuración")]
+    [Header("Configuration")]
     [SerializeField]
     private RangedAttackConfig _config;
 
-    [Header("Componentes de Soporte")]
+    [Header("Support Components")]
     [SerializeField]
     private MonoBehaviour _projectileSpawnerSource;
 
@@ -67,8 +67,8 @@ public sealed class RangedAttack : MonoBehaviour, IAttack
     }
 
     /// <summary>
-    /// Ejecuta de manera autoritativa la estrategia del ataque ranged.
-    /// Solo construye la solicitud de spawn del proyectil y la delega al spawner.
+    /// Executes the ranged attack strategy authoritatively on the State Authority.
+    /// Builds the projectile spawn request and delegates it to the spawner.
     /// </summary>
     public AttackResult Execute(in AttackRequest request)
     {
@@ -78,7 +78,7 @@ public sealed class RangedAttack : MonoBehaviour, IAttack
                 AttackFailureReason.MissingConfiguration);
         }
 
-        // Validar dirección de ataque
+        // Validate attack direction
         if (request.Direction.sqrMagnitude < 0.0001f)
         {
             return AttackResult.Rejected(

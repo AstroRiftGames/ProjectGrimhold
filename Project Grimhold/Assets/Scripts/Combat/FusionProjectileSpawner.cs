@@ -2,17 +2,17 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Adaptador de red Unity/Fusion para generar proyectiles de manera autoritativa.
-/// Implementa <see cref="IProjectileSpawner"/> como un <see cref="NetworkBehaviour"/>.
+/// Unity/Fusion network adapter to spawn projectiles authoritatively.
+/// Implements <see cref="IProjectileSpawner"/> as a <see cref="NetworkBehaviour"/>.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class FusionProjectileSpawner : NetworkBehaviour, IProjectileSpawner
 {
-    [Header("Configuración")]
+    [Header("Configuration")]
     [SerializeField]
     private RangedAttackConfig _config;
 
-    [Header("Componentes de Soporte")]
+    [Header("Support Components")]
     [SerializeField]
     private MonoBehaviour _damageResolverSource;
 
@@ -37,19 +37,19 @@ public sealed class FusionProjectileSpawner : NetworkBehaviour, IProjectileSpawn
     }
 
     /// <summary>
-    /// Intenta generar un proyectil en la red de forma autoritativa.
-    /// Valida la autoridad, configuración y dependencias antes del spawn.
+    /// Attempts to spawn a projectile on the network authoritatively.
+    /// Validates network authority, configuration, and dependencies before spawning.
     /// </summary>
     public ProjectileSpawnResult Spawn(in ProjectileSpawnRequest request)
     {
-        // 1. Validar autoridad de red
+        // 1. Validate network authority
         if (!HasStateAuthority)
         {
             Debug.LogWarning($"[CombatTrace] Projectile spawn rejected: Lack of State Authority on {gameObject.name}.", this);
             return new ProjectileSpawnResult(false);
         }
 
-        // 2. Validar configuración y dependencias
+        // 2. Validate configuration and dependencies
         if (_config == null || !_config.ProjectilePrefab.IsValid)
         {
             Debug.LogError($"[CombatTrace] Projectile spawn rejected: Missing or invalid RangedAttackConfig/ProjectilePrefab.", this);
@@ -62,7 +62,7 @@ public sealed class FusionProjectileSpawner : NetworkBehaviour, IProjectileSpawn
             return new ProjectileSpawnResult(false);
         }
 
-        // 3. Validar valores de la solicitud
+        // 3. Validate request parameters
         if (request.Direction.sqrMagnitude < 0.0001f)
         {
             Debug.LogWarning($"[CombatTrace] Projectile spawn rejected: Invalid direction.", this);
@@ -74,7 +74,7 @@ public sealed class FusionProjectileSpawner : NetworkBehaviour, IProjectileSpawn
 
         Debug.Log($"[CombatTrace] Projectile spawn requested. OwnerId: {request.OwnerId}, Origin: {request.Origin}, Direction: {request.Direction}", this);
 
-        // 4. Invocar el spawn de red autoritativo con inicialización previa
+        // 4. Invoke authoritative network spawn with inline pre-initialization
         NetworkSpawnStatus spawnStatus = Runner.TrySpawn(
             _config.ProjectilePrefab,
             out NetworkObject spawnedObject,
@@ -99,7 +99,7 @@ public sealed class FusionProjectileSpawner : NetworkBehaviour, IProjectileSpawn
 
         Debug.Log($"[CombatTrace] TrySpawn status: {spawnStatus}, spawnedObject: {(spawnedObject != null ? spawnedObject.name : "null")}, initialized: {projectileInitialized}", this);
 
-        // 5. Resolver fallos de inicialización o spawn
+        // 5. Handle initialization or spawn failures
         if (!projectileInitialized)
         {
             if (spawnedObject != null)

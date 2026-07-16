@@ -2,8 +2,8 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Implementación concreta de IDamageResolver como NetworkBehaviour para operar autoritativamente
-/// dentro de la sesión de Photon Fusion.
+/// Concrete implementation of IDamageResolver as a NetworkBehaviour to operate authoritatively
+/// within the Photon Fusion session.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class DamageResolver : NetworkBehaviour, IDamageResolver
@@ -20,12 +20,12 @@ public sealed class DamageResolver : NetworkBehaviour, IDamageResolver
     }
 
     /// <summary>
-    /// Resuelve una solicitud de daño localizando la entidad, aplicando validaciones generales
-    /// y delegando la aplicación real a la entidad de manera autoritativa.
+    /// Resolves a damage request by locating the entity, applying general validations,
+    /// and delegating the actual application to the entity authoritatively.
     /// </summary>
     public DamageResult Resolve(in DamageRequest request)
     {
-        // 1. Validar self-damage
+        // 1. Validate self-damage
         if (request.AttackerId == request.TargetId)
         {
             return new DamageResult(
@@ -50,7 +50,7 @@ public sealed class DamageResolver : NetworkBehaviour, IDamageResolver
             );
         }
 
-        // 2. Localizar el objetivo
+        // 2. Locate target entity
         if (!_registry.TryGetDamageable(request.TargetId, out IDamageable target))
         {
             return new DamageResult(
@@ -63,7 +63,7 @@ public sealed class DamageResolver : NetworkBehaviour, IDamageResolver
             );
         }
 
-        // 3. Comprobar que pueda recibir daño
+        // 3. Verify target can receive damage
         if (!target.CanReceiveDamage)
         {
             return new DamageResult(
@@ -76,7 +76,7 @@ public sealed class DamageResolver : NetworkBehaviour, IDamageResolver
             );
         }
 
-        // 4. Delegar la aplicación del daño e incorporar validaciones de autoridad dentro de IDamageable
+        // 4. Delegate damage application and handle authority validation within IDamageable
         return target.ApplyDamage(request);
     }
 }

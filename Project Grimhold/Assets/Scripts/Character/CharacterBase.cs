@@ -2,16 +2,16 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Clase base abstracta para los personajes del juego (Jugadores, Enemigos y NPCs).
-/// Implementa los contratos de identidad y de daño bajo un modelo de red autoritativo.
+/// Abstract base class for all game characters (Players, Enemies, and NPCs).
+/// Implements the identity and damage contracts under an authoritative network model.
 ///
-/// Esta clase es parte de la capa de integración de red y gameplay.
-/// Gestiona la salud, el ciclo de vida y la muerte de la entidad en red.
+/// This class is part of the network and gameplay integration layer.
+/// Manages the health, lifecycle, and death of the networked entity.
 /// </summary>
 [DisallowMultipleComponent]
 public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
 {
-    [Header("Configuración de Salud")]
+    [Header("Health Configuration")]
     [SerializeField, Min(0.1f)]
     private float _maxHealth = 100f;
 
@@ -24,19 +24,19 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     public float Health { get; private set; }
 
     /// <summary>
-    /// Identificador estable de entidad en el core de gameplay.
-    /// Mapeado desde el identificador de red asignado por Photon Fusion.
+    /// Stable entity identifier in the gameplay core.
+    /// Mapped from the network identifier assigned by Photon Fusion.
     /// </summary>
     public new EntityId Id => new EntityId(unchecked((int)Object.Id.Raw));
 
     /// <summary>
-    /// Indica si el personaje se encuentra con vida.
+    /// Indicates whether the character is currently alive.
     /// </summary>
     public bool IsAlive => Health > 0f;
 
     /// <summary>
-    /// Indica si el personaje puede recibir daño en este momento.
-    /// Puede ser sobrescrito para aplicar estados de invulnerabilidad temporales.
+    /// Indicates whether the character can receive damage at this moment.
+    /// Can be overridden to apply temporary invulnerability states.
     /// </summary>
     public virtual bool CanReceiveDamage => IsAlive;
 
@@ -46,7 +46,7 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     }
 
     /// <summary>
-    /// Inicializa el estado del personaje en la red y lo registra en el EntityRegistry.
+    /// Initializes character state on the network and registers it with the EntityRegistry.
     /// </summary>
     public override void Spawned()
     {
@@ -55,7 +55,7 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
             Health = _maxHealth;
         }
 
-        // Registrar la entidad y sus colliders asociados para la simulación
+        // Register entity and its associated colliders for simulation
         _registry = Runner.GetComponent<EntityRegistry>();
         if (_registry != null)
         {
@@ -65,7 +65,7 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     }
 
     /// <summary>
-    /// Remueve la entidad y sus colliders del EntityRegistry al ser despawneada.
+    /// Removes the entity and its colliders from the EntityRegistry when despawned.
     /// </summary>
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
@@ -77,14 +77,14 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     }
 
     /// <summary>
-    /// Procesa y aplica una solicitud de daño sobre el personaje.
-    /// Este método requiere State Authority para ejecutarse de manera autoritativa.
+    /// Processes and applies a damage request to the character.
+    /// This method requires State Authority to execute authoritatively.
     /// </summary>
-    /// <param name="request">La solicitud de daño detallada.</param>
-    /// <returns>El resultado del daño procesado.</returns>
+    /// <param name="request">The detailed damage request.</param>
+    /// <returns>The result of the processed damage.</returns>
     public DamageResult ApplyDamage(in DamageRequest request)
     {
-        // El atacante o cliente local no puede confirmar de forma autoritativa el daño.
+        // Attackers or local clients cannot authoritatively confirm damage.
         if (!HasStateAuthority)
         {
             return new DamageResult(Id, false, 0f, Health, false, DamageFailureReason.MissingAuthority);
@@ -129,22 +129,22 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     }
 
     /// <summary>
-    /// Permite calcular mitigaciones de daño específicas.
-    /// Puede ser sobrescrito por clases derivadas para incorporar armadura, resistencias, etc.
+    /// Allows calculation of specific damage mitigations.
+    /// Can be overridden by derived classes to incorporate armor, resistances, etc.
     /// </summary>
-    /// <param name="amount">Monto original del daño.</param>
-    /// <param name="damageType">Tipo de daño de la solicitud.</param>
-    /// <returns>El monto de daño final tras aplicar mitigaciones.</returns>
+    /// <param name="amount">Original damage amount.</param>
+    /// <param name="damageType">Damage type of the request.</param>
+    /// <returns>The final damage amount after mitigations have been applied.</returns>
     protected virtual float CalculateMitigatedDamage(float amount, DamageType damageType)
     {
         return amount;
     }
 
     /// <summary>
-    /// Método llamado cuando la salud del personaje llega a 0 en State Authority.
+    /// Method called when character health reaches 0 on the State Authority.
     /// </summary>
     protected virtual void HandleDeath()
     {
-        // Comportamiento base ante la muerte del personaje
+        // Base behavior for character death
     }
 }

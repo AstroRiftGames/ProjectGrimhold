@@ -3,16 +3,16 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Componente de red responsable de procesar la intención de ataque del jugador
-/// y delegar la ejecución a la implementación de ataque activa.
+/// Network component responsible for processing player attack intentions
+/// and delegating execution to the active attack strategy.
 ///
-/// Este controlador opera con cualquier estrategia que implemente el contrato
-/// <see cref="IAttack"/>, aislando la simulación de gameplay de la presentación visual.
+/// This controller operates with any strategy implementing the
+/// <see cref="IAttack"/> contract, isolating gameplay simulation from visual presentation.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class PlayerCombatNetworkController : NetworkBehaviour
 {
-    [Header("Dependencias")]
+    [Header("Dependencies")]
     [SerializeField]
     private MonoBehaviour _characterSource;
 
@@ -39,7 +39,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
     [Networked]
     public NetworkBool IsAttackEnabled { get; private set; }
 
-    // Sincronización para la capa de presentación
+    // Replicated state for local presentation layers
     [Networked]
     private int AttackSequence { get; set; }
 
@@ -56,7 +56,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
     private int LastAttackTick { get; set; }
 
     /// <summary>
-    /// Evento local emitido en Render cuando se detecta la ejecución exitosa de un ataque en la simulación.
+    /// Local event raised during Render when a successful attack execution is detected in the simulation.
     /// </summary>
     public event Action<AttackPerformedEvent> AttackPerformed;
 
@@ -70,8 +70,8 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
         CacheDependencies();
         _dependenciesValid = ValidateDependencies();
 
-        // Inicializar el valor observado local con la secuencia actual de la red
-        // para evitar la reproducción de eventos de ataques anteriores al spawn de este proxy.
+        // Initialize the local observed sequence with the current network sequence
+        // to prevent triggering events from attacks performed before this proxy spawned.
         _lastObservedSequence = AttackSequence;
 
         if (HasStateAuthority)
@@ -87,7 +87,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
             return;
         }
 
-        // Se lee el input de Fusion. Si no hay input disponible en este tick, salimos inmediatamente.
+        // Read input from Fusion. If no input is available for this tick, exit immediately.
         if (!GetInput(out PlayerNetworkInput input))
         {
             return;
@@ -108,11 +108,11 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
             }
         }
 
-        // Se guarda el estado de botones anterior incluso si el combate está deshabilitado o en cooldown,
-        // para evitar que se interprete una pulsación antigua al habilitarse el combate.
+        // Save previous buttons state even if combat is disabled or on cooldown,
+        // to prevent interpreting an old press when combat gets re-enabled.
         PreviousButtons = currentButtons;
 
-        // Solo la State Authority decide y ejecuta la estrategia de ataque autoritativa.
+        // Only State Authority decides and executes the authoritative attack strategy.
         if (!HasStateAuthority)
         {
             return;
@@ -131,7 +131,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
             return;
         }
 
-        // Detectar cambios en la secuencia de ataque para notificar a la capa de presentación localmente
+        // Detect changes in the attack sequence to notify the local presentation layer
         if (AttackSequence != _lastObservedSequence)
         {
             AttackPerformedEvent performedEvent = new AttackPerformedEvent(
@@ -148,7 +148,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
     }
 
     /// <summary>
-    /// Intenta ejecutar el ataque activo validando cooldown, dirección y la estrategia.
+    /// Attempts to execute the active attack, validating cooldown, direction, and strategy.
     /// </summary>
     private void TryExecuteAttack(in PlayerNetworkInput input)
     {
@@ -178,7 +178,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
             direction = _movementController.FacingDirection;
         }
 
-        // Rechazar direcciones inválidas con magnitud prácticamente cero
+        // Reject invalid directions with virtually zero magnitude
         if (direction.sqrMagnitude < 0.0001f)
         {
             return;
@@ -212,13 +212,13 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
             LastAttackTypeValue = (int)_activeAttack.Type;
             LastAttackTick = request.SimulationTick;
             
-            // Incrementar la secuencia al final para asegurar la sincronización correcta de todos los datos
+            // Increment sequence last to ensure correct replication of all related fields
             AttackSequence++;
         }
     }
 
     /// <summary>
-    /// Cambia el estado de habilitación del ataque de manera autoritativa.
+    /// Authortatively changes the combat enabled state.
     /// </summary>
     public bool TrySetAttackEnabled(bool enabled)
     {
@@ -232,7 +232,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour
     }
 
     /// <summary>
-    /// Cambia la estrategia de ataque activa. Requiere State Authority.
+    /// Authortatively updates the active attack strategy. Requires State Authority.
     /// </summary>
     public bool TrySetActiveAttack(MonoBehaviour attackSource)
     {
