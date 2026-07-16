@@ -70,7 +70,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: NetworkedBehaviours.Array.size
-      value: 6
+      value: 7
       objectReference: {fileID: 0}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: 'NetworkedBehaviours.Array.data[4]'
@@ -78,6 +78,10 @@ PrefabInstance:
       objectReference: {fileID: 6260509138164896363}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: 'NetworkedBehaviours.Array.data[5]'
+      value: 
+      objectReference: {fileID: 9212628843141754290}
+    - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: 'NetworkedBehaviours.Array.data[6]'
       value: 
       objectReference: {fileID: 481970610349468446}
     - target: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
@@ -157,3 +161,14 @@ MonoBehaviour:
   _attackOrigin: {fileID: 0}
   _config: {fileID: 0}
   _movementController: {fileID: 0}
+--- !u!114 &9212628843141754290 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3399445609163750024, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+  m_PrefabInstance: {fileID: 5833451083347531578}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7806615118508775566}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 597c9264d4dbeca48814ffa8cd8781fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LocalPlayerCameraBinder

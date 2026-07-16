@@ -70,10 +70,14 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: NetworkedBehaviours.Array.size
-      value: 6
+      value: 7
       objectReference: {fileID: 0}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: 'NetworkedBehaviours.Array.data[5]'
+      value: 
+      objectReference: {fileID: 4103056846079488576}
+    - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: 'NetworkedBehaviours.Array.data[6]'
       value: 
       objectReference: {fileID: 4419447253773158415}
     - target: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
@@ -135,3 +139,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FusionProjectileSpawner
   _config: {fileID: 11400000, guid: 72c2830a8240480099febce01129a88f, type: 2}
   _damageResolverSource: {fileID: 1281523189680295321}
+--- !u!114 &4103056846079488576 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3399445609163750024, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+  m_PrefabInstance: {fileID: 1719739210643671240}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3134367351636412284}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 597c9264d4dbeca48814ffa8cd8781fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LocalPlayerCameraBinder

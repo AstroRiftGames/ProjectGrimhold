@@ -804,6 +804,29 @@ El visualizador de animación (`PlayerAnimatorView`):
 
 No se sincronizan clips ni variables visuales directamente; la animación se deriva enteramente del estado simulado.
 
+### 17.1 Cámara 2D Local de Presentación
+
+El sistema de cámara sigue exclusivamente al jugador local que posee `Input Authority`. Al pertenecer enteramente a la presentación, la cámara no participa de la simulación de red ni sincroniza datos en red.
+
+#### Componentes
+- `LocalCameraController` (MonoBehaviour): Adjunto a la cámara principal de la escena. Maneja el seguimiento suave, el offset y la profundidad absoluta del eje Z.
+- `LocalPlayerCameraBinder` (NetworkBehaviour): Adjunto al prefab del jugador. Actúa como adaptador local del ciclo de vida de red de Fusion.
+
+#### Registro e Inicialización
+Se utiliza un mecanismo de registro estático para desacoplar el orden de inicialización:
+1. **Si la cámara aparece primero**: `LocalCameraController` se registra en `OnEnable` como `Instance`. Cuando el jugador local spawnea, `LocalPlayerCameraBinder.Spawned()` detecta `HasInputAuthority`, se registra como `LocalPlayerInstance` y le asigna su transform a `LocalCameraController.Instance.SetTarget(transform)`.
+2. **Si el jugador aparece primero**: El binder se registra como `LocalPlayerInstance`. Cuando la cámara se habilita en `OnEnable`, consulta `LocalPlayerInstance` y establece inmediatamente su objetivo.
+
+#### Liberación del Objetivo y Respawn
+- **Despawn/Destrucción**: El binder centraliza su limpieza de forma idempotente en un método privado. Al destruirse o despawnearse el jugador, se llama a `ClearTarget(transform)` pasándose a sí mismo como argumento.
+- **Identidad en Limpieza**: `LocalCameraController.ClearTarget` solo borra el objetivo si coincide exactamente con el transform provisto. Esto asegura que si el jugador anterior es destruido *después* de que el nuevo jugador ya haya hecho respawn y se haya registrado, el OnDestroy tardío del anterior no limpie el nuevo objetivo.
+- **Reset de Velocidad**: `SmoothDamp` requiere reiniciar su velocidad interna (`_followVelocity`) a cero al cambiar o limpiar el objetivo para evitar aceleraciones residuales.
+- **Snapping Inicial**: La opción configurable `_snapOnTargetAssigned` permite que al recibir un objetivo por primera vez, la cámara se posicione instantáneamente sin suavizado inicial.
+
+#### Limitaciones conocidas y Validaciones Manuales
+- **Limitación**: Solo debe haber un `LocalCameraController` activo en la escena. Si se detectan múltiples instancias, se reportará una advertencia en la consola.
+- **Validación Host/Cliente**: Comprobar que en sesiones multijugador la cámara del host sigue únicamente al jugador local del host y la cámara del cliente sigue únicamente al jugador del cliente. Los proxies remotos deben ser ignorados por el binder de la cámara local.
+
 ---
 
 ## 18. Uso limitado de eventos
@@ -1025,7 +1048,9 @@ Assets/
         │   └── PlayerMovementBlockReason.cs
         │
         └── Presentation/
-            └── PlayerAnimatorView.cs
+            ├── PlayerAnimatorView.cs
+            ├── LocalCameraController.cs
+            └── LocalPlayerCameraBinder.cs
 
 Assets/
 └── Scripts/
@@ -1058,6 +1083,7 @@ NetworkPlayer
 ├── Collider2D
 ├── NetworkPlayerMovementController
 ├── Kinematic2DMovementMotor
+├── LocalPlayerCameraBinder
 └── Body
     ├── SpriteRenderer
     ├── Animator
