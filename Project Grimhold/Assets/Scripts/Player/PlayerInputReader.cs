@@ -24,6 +24,7 @@ public sealed class PlayerInputReader : MonoBehaviour
     private Vector2 _aimWorldPosition;
 
     private NetworkButtons _buttons;
+    private NetworkButtons _pendingButtons;
     private bool _resetAccumulatedButtons;
 
     private void Awake()
@@ -35,6 +36,7 @@ public sealed class PlayerInputReader : MonoBehaviour
 
     private void OnEnable()
     {
+        _inputActions.Gameplay.Interact.performed += OnInteractPerformed;
         _inputActions.Gameplay.Enable();
     }
 
@@ -49,6 +51,7 @@ public sealed class PlayerInputReader : MonoBehaviour
 
     private void OnDisable()
     {
+        _inputActions.Gameplay.Interact.performed -= OnInteractPerformed;
         _inputActions.Gameplay.Disable();
         ResetInputState();
     }
@@ -56,6 +59,11 @@ public sealed class PlayerInputReader : MonoBehaviour
     private void OnDestroy()
     {
         _inputActions.Dispose();
+    }
+
+    private void OnInteractPerformed(UnityEngine.InputSystem.InputAction.CallbackContext context)
+    {
+        _pendingButtons.Set(PlayerInputButton.Interact, true);
     }
 
     /// <summary>
@@ -69,12 +77,23 @@ public sealed class PlayerInputReader : MonoBehaviour
         // same rendered frame.
         _resetAccumulatedButtons = true;
 
-        return new PlayerNetworkInput
+        NetworkButtons combinedButtons = _buttons;
+
+        if (_pendingButtons.IsSet(PlayerInputButton.Interact))
+        {
+            combinedButtons.Set(PlayerInputButton.Interact, true);
+        }
+
+        PlayerNetworkInput input = new PlayerNetworkInput
         {
             MoveDirection = _moveDirection,
             AimWorldPosition = _aimWorldPosition,
-            Buttons = _buttons
+            Buttons = combinedButtons
         };
+
+        _pendingButtons.Set(PlayerInputButton.Interact, false);
+
+        return input;
     }
 
     private void ReadMovement()
@@ -161,6 +180,7 @@ public sealed class PlayerInputReader : MonoBehaviour
         _moveDirection = Vector2.zero;
         _aimWorldPosition = Vector2.zero;
         _buttons = default;
+        _pendingButtons = default;
         _resetAccumulatedButtons = false;
     }
 

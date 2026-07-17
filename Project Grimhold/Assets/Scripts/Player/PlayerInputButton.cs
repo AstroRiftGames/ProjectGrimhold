@@ -1,5 +1,5 @@
 public enum PlayerInputButton
 {
-    PrimaryAttack,
-    Interact
+    PrimaryAttack = 0,
+    Interact = 1
 }

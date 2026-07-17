@@ -52,5 +52,21 @@ namespace Tests.EditMode.Player
             Assert.AreEqual(testAim, result.AimWorldPosition);
             Assert.IsTrue(result.Buttons.IsSet(PlayerInputButton.PrimaryAttack));
         }
+
+        [Test]
+        public void ConsumeNetworkInput_InteractLatchingAndClearing()
+        {
+            var method = typeof(PlayerInputReader).GetMethod("OnInteractPerformed", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.That(method, Is.Not.Null);
+
+            method.Invoke(_reader, new object[] { default(UnityEngine.InputSystem.InputAction.CallbackContext) });
+
+            PlayerNetworkInput result1 = _reader.ConsumeNetworkInput();
+            Assert.IsTrue(result1.Buttons.IsSet(PlayerInputButton.Interact), "Interact should be set in the first consume");
+
+            PlayerNetworkInput result2 = _reader.ConsumeNetworkInput();
+            Assert.IsFalse(result2.Buttons.IsSet(PlayerInputButton.Interact), "Interact should be cleared in the second consume");
+        }
     }
 }
