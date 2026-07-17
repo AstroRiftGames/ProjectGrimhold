@@ -21,8 +21,8 @@ public sealed class PlayerAnimatorView : MonoBehaviour
     private int _isMovingHash;
 
     private bool _hashesInitialized;
-
     private Vector2? _temporalFacingDirection;
+    private bool _isDefeated;
 
     private void Awake()
     {
@@ -33,6 +33,7 @@ public sealed class PlayerAnimatorView : MonoBehaviour
     private void OnDisable()
     {
         _temporalFacingDirection = null;
+        _isDefeated = false;
     }
 
     private void LateUpdate()
@@ -50,7 +51,12 @@ public sealed class PlayerAnimatorView : MonoBehaviour
         Vector2 facing;
         bool isMoving;
 
-        if (_temporalFacingDirection.HasValue)
+        if (_isDefeated)
+        {
+            facing = _movementController.FacingDirection;
+            isMoving = false;
+        }
+        else if (_temporalFacingDirection.HasValue)
         {
             facing = _temporalFacingDirection.Value;
             isMoving = false;
@@ -72,12 +78,29 @@ public sealed class PlayerAnimatorView : MonoBehaviour
     }
 
     /// <summary>
+    /// Sets the defeated visual state of the animator, halting locomotion animation.
+    /// </summary>
+    /// <param name="defeated">True if the player is defeated, false otherwise.</param>
+    public void SetDefeated(bool defeated)
+    {
+        _isDefeated = defeated;
+        if (defeated)
+        {
+            _temporalFacingDirection = null;
+        }
+    }
+
+    /// <summary>
     /// Applies a temporal facing direction (e.g. for attack presentation) that overrides locomotion facing direction.
     /// During temporal facing, the movement state is forced to IsMoving = false.
     /// </summary>
     /// <param name="direction">The direction to face.</param>
     public void ApplyTemporalFacingDirection(Vector2 direction)
     {
+        if (_isDefeated)
+        {
+            return;
+        }
         if (direction.sqrMagnitude < 0.0001f)
         {
             return;

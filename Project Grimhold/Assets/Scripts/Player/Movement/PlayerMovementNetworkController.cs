@@ -32,6 +32,8 @@ public sealed class PlayerMovementNetworkController : NetworkBehaviour
     [Networked]
     public NetworkBool IsMoving { get; private set; }
 
+    private CharacterBase _characterBase;
+
     private void Awake()
     {
         CacheDependencies();
@@ -67,12 +69,14 @@ public sealed class PlayerMovementNetworkController : NetworkBehaviour
 
         Vector2 moveDirection = ReadMoveDirection();
 
-        if (IsControlEnabled && moveDirection.sqrMagnitude > ValidDirectionSqrThreshold)
+        bool canMove = IsControlEnabled && (_characterBase == null || _characterBase.IsAlive);
+
+        if (canMove && moveDirection.sqrMagnitude > ValidDirectionSqrThreshold)
         {
             FacingDirection = moveDirection.normalized;
         }
 
-        Vector2 displacement = IsControlEnabled
+        Vector2 displacement = canMove
             ? moveDirection * _moveSpeed * Runner.DeltaTime
             : Vector2.zero;
 
@@ -113,6 +117,11 @@ public sealed class PlayerMovementNetworkController : NetworkBehaviour
         {
             _movementMotor =
                 GetComponent<Kinematic2DMovementMotor>();
+        }
+
+        if (_characterBase == null)
+        {
+            _characterBase = GetComponent<CharacterBase>();
         }
     }
 

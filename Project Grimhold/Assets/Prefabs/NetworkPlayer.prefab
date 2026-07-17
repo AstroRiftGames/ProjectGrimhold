@@ -271,65 +271,38 @@ MonoBehaviour:
   _animatorView: {fileID: 7572879158521877428}
   _weaponPivot: {fileID: 6727737383359403759}
   _weaponSpriteRenderer: {fileID: 4522316450052852347}
+  _attackDuration: 0.2
+  _attackStartAngle: -45
+  _attackEndAngle: 45
+  _attackAngleCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   _weaponHandDistance: 0.5
-  _meleeDuration: 0.2
-  _meleeStartAngle: -45
-  _meleeEndAngle: 45
-  _meleeAngleCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  _meleeSortingOrderFront: 10
-  _meleeSortingOrderBack: -10
-  _meleeHideWeaponAtEnd: 1
-  _rangedDuration: 0.2
-  _rangedRecoilDistance: 0.25
-  _rangedRecoilCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  _rangedScalePulse: {x: 1, y: 1, z: 1}
-  _rangedHideWeaponAtEnd: 1
+  _sortingOrderFront: 10
+  _sortingOrderBack: -10
+  _verticalSortingThreshold: 0
+  _hideWeaponAtEnd: 1
 --- !u!1 &4314099452745549171
 GameObject:
   m_ObjectHideFlags: 0
@@ -381,6 +354,7 @@ GameObject:
   - component: {fileID: 3399445609163750024}
   - component: {fileID: 4462333045026223586}
   - component: {fileID: 7490000000000000001}
+  - component: {fileID: 8130308898598324325}
   m_Layer: 7
   m_Name: NetworkPlayer
   m_TagString: Player
@@ -639,38 +613,6 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 0.55, y: 0.25}
   m_EdgeRadius: 0
---- !u!1 &6258069994273772255
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 6727737383359403759}
-  m_Layer: 7
-  m_Name: WeaponPivot
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &6727737383359403759
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6258069994273772255}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1771784473681192027}
-  m_Father: {fileID: 3964075307184218784}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &7490000000000000001
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -748,3 +690,106 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   _healthEpsilon: 0.001
+--- !u!114 &8130308898598324325
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b358ffc1433f44746bcbf3976fd30a18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerDefeatPresenter
+  _characterBase: {fileID: 729366679366126330}
+  _animatorView: {fileID: 7572879158521877428}
+  _combatPresenter: {fileID: 2199920047182287500}
+  _damageFeedbackPresenter: {fileID: 7490000000000000001}
+  _weaponSpriteRenderer: {fileID: 4522316450052852347}
+  _visualTransform: {fileID: 7397229956843810021}
+  _spriteRenderers:
+  - {fileID: 1066720069559603162}
+  _transitionDuration: 0.5
+  _targetRotationAngle: 90
+  _rotationCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  _targetAlpha: 0.6
+  _alphaCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!1 &6258069994273772255
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6727737383359403759}
+  m_Layer: 7
+  m_Name: WeaponPivot
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6727737383359403759
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6258069994273772255}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1771784473681192027}
+  m_Father: {fileID: 3964075307184218784}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
