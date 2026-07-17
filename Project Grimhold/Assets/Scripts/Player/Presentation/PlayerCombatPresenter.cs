@@ -170,6 +170,16 @@ public sealed class PlayerCombatPresenter : MonoBehaviour
 
     private void OnAttackPerformed(AttackPerformedEvent attackEvent)
     {
+        // Do not trigger attack presentation if the character is dead/defeated
+        if (_combatController != null)
+        {
+            var character = _combatController.GetComponentInParent<CharacterBase>();
+            if (character != null && !character.IsAlive)
+            {
+                return;
+            }
+        }
+
         // Cancel any active animation cleanly first
         CancelAndRestore();
 
@@ -200,6 +210,20 @@ public sealed class PlayerCombatPresenter : MonoBehaviour
 
     private void LateUpdate()
     {
+        // Cancel/prevent any updates if the character is dead
+        if (_combatController != null)
+        {
+            var character = _combatController.GetComponentInParent<CharacterBase>();
+            if (character != null && !character.IsAlive)
+            {
+                if (_animationActive)
+                {
+                    CancelAndRestore();
+                }
+                return;
+            }
+        }
+
         if (!_animationActive)
         {
             return;

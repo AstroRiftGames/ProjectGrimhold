@@ -86,6 +86,17 @@ public sealed class DamageFeedbackPresenter : MonoBehaviour
 
         float currentHealth = _characterBase.Health;
 
+        // Damage feedback should not run or restart if the character is dead/defeated
+        if (!_characterBase.IsAlive)
+        {
+            if (_isFeedbackActive)
+            {
+                CancelAndRestore();
+            }
+            _lastObservedHealth = currentHealth;
+            return;
+        }
+
         if (currentHealth < _lastObservedHealth - _healthEpsilon)
         {
             TriggerFeedback();

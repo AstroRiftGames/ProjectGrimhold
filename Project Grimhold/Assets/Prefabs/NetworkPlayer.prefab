@@ -710,7 +710,10 @@ MonoBehaviour:
   _visualTransform: {fileID: 7397229956843810021}
   _spriteRenderers:
   - {fileID: 1066720069559603162}
+  _bodyVisualRoot: {fileID: 1221760144332657486}
+  _combatVisualRoot: {fileID: 2408805181285633772}
   _transitionDuration: 0.5
+  _hideDelayAfterTransition: 1.5
   _targetRotationAngle: 90
   _rotationCurve:
     serializedVersion: 2

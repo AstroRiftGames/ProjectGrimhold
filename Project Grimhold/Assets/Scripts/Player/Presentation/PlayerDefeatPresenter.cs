@@ -31,9 +31,18 @@ public sealed class PlayerDefeatPresenter : MonoBehaviour
     [SerializeField]
     private SpriteRenderer[] _spriteRenderers;
 
+    [SerializeField]
+    private GameObject _bodyVisualRoot;
+
+    [SerializeField]
+    private GameObject _combatVisualRoot;
+
     [Header("Defeat Visuals")]
     [SerializeField, Min(0.001f)]
     private float _transitionDuration = 0.5f;
+
+    [SerializeField, Min(0f)]
+    private float _hideDelayAfterTransition = 1.5f;
 
     [SerializeField]
     private float _targetRotationAngle = 90f;
@@ -51,11 +60,15 @@ public sealed class PlayerDefeatPresenter : MonoBehaviour
     private bool _isDefeated;
     private float _elapsedTime;
     private bool _transitionActive;
+    private float _timeSinceTransitionCompleted;
+    private bool _visualsHidden;
 
     // Cached base states
     private Quaternion _baseLocalRotation;
     private float[] _originalAlphas;
     private Color[] _originalColors;
+    private bool _baseBodyVisualActive;
+    private bool _baseCombatVisualActive;
     private bool _hasCapturedBaseState;
     private bool _isInitialized;
 
@@ -102,15 +115,19 @@ public sealed class PlayerDefeatPresenter : MonoBehaviour
         {
             TriggerDefeat(false); // Play transition
         }
-        else if (currentlyAlive && _isDefeated)
-        {
-            // Revived
-            CancelAndRestore();
-        }
 
         if (_transitionActive)
         {
             UpdateTransition();
+        }
+
+        if (_isDefeated && !_transitionActive && !_visualsHidden)
+        {
+            _timeSinceTransitionCompleted += Time.deltaTime;
+            if (_timeSinceTransitionCompleted >= _hideDelayAfterTransition)
+            {
+                HideVisuals();
+            }
         }
     }
 
@@ -149,6 +166,16 @@ public sealed class PlayerDefeatPresenter : MonoBehaviour
             _baseLocalRotation = _visualTransform.localRotation;
         }
 
+        if (_bodyVisualRoot != null)
+        {
+            _baseBodyVisualActive = _bodyVisualRoot.activeSelf;
+        }
+
+        if (_combatVisualRoot != null)
+        {
+            _baseCombatVisualActive = _combatVisualRoot.activeSelf;
+        }
+
         if (_spriteRenderers != null && _spriteRenderers.Length > 0)
         {
             _originalColors = new Color[_spriteRenderers.Length];
@@ -182,9 +209,28 @@ public sealed class PlayerDefeatPresenter : MonoBehaviour
         }
     }
 
+    private void HideVisuals()
+    {
+        if (_visualsHidden)
+        {
+            return;
+        }
+        _visualsHidden = true;
+        if (_bodyVisualRoot != null)
+        {
+            _bodyVisualRoot.SetActive(false);
+        }
+        if (_combatVisualRoot != null)
+        {
+            _combatVisualRoot.SetActive(false);
+        }
+    }
+
     private void TriggerDefeat(bool instant)
     {
         _isDefeated = true;
+        _timeSinceTransitionCompleted = 0f;
+        _visualsHidden = false;
 
         // Cancel other presentation components to prevent overriding colors/scale/movement animations
         if (_combatPresenter != null)
@@ -213,6 +259,7 @@ public sealed class PlayerDefeatPresenter : MonoBehaviour
             _transitionActive = false;
             _elapsedTime = _transitionDuration;
             ApplyDefeatState(1f);
+            HideVisuals();
         }
         else
         {
@@ -274,6 +321,8 @@ public sealed class PlayerDefeatPresenter : MonoBehaviour
         _isDefeated = false;
         _transitionActive = false;
         _elapsedTime = 0f;
+        _timeSinceTransitionCompleted = 0f;
+        _visualsHidden = false;
 
         if (_animatorView != null)
         {
@@ -283,6 +332,15 @@ public sealed class PlayerDefeatPresenter : MonoBehaviour
         if (!_hasCapturedBaseState)
         {
             return;
+        }
+
+        if (_bodyVisualRoot != null)
+        {
+            _bodyVisualRoot.SetActive(_baseBodyVisualActive);
+        }
+        if (_combatVisualRoot != null)
+        {
+            _combatVisualRoot.SetActive(_baseCombatVisualActive);
         }
 
         if (_visualTransform != null)
