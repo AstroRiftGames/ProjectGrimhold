@@ -4,6 +4,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
+using Fusion;
 using Assert = NUnit.Framework.Assert;
 
 namespace Tests.EditMode.Combat
@@ -28,12 +29,20 @@ namespace Tests.EditMode.Combat
             }
         }
 
-        private static RangedAttackConfig CreateValidConfigClone()
+        private static RangedAttackConfig CreateTemporaryValidConfig()
         {
-            const string AssetPath = "Assets/ScriptableObjects/RangedAttackConfig.asset";
-            RangedAttackConfig source = AssetDatabase.LoadAssetAtPath<RangedAttackConfig>(AssetPath);
-            Assert.That(source, Is.Not.Null, $"Could not load valid config at {AssetPath}.");
-            return Object.Instantiate(source);
+            var config = ScriptableObject.CreateInstance<RangedAttackConfig>();
+
+            SetPrivateField(config, typeof(AttackConfig), "_damage", 10f);
+            SetPrivateField(config, typeof(AttackConfig), "_cooldownSeconds", 0.5f);
+            SetPrivateField(config, "_projectileSpeed", 10f);
+            SetPrivateField(config, "_lifetimeSeconds", 5f);
+            SetPrivateField(config, "_maxRange", 10f);
+            SetPrivateField(config, "_projectileSpawnOffset", 0.7f);
+            SetPrivateField(config, "_projectilePrefab", new NetworkPrefabRef("00000000000000000000000000000001"));
+            SetPrivateField(config, "_impactLayerMask", new LayerMask { value = 1 });
+
+            return config;
         }
 
         private static void SetPrivateField(object target, System.Type declaringType, string fieldName, object value)
@@ -57,7 +66,7 @@ namespace Tests.EditMode.Combat
             _spawner.SpawnSucceeds = spawnSucceeds;
 
             _attack = _gameObject.AddComponent<RangedAttack>();
-            _config = CreateValidConfigClone();
+            _config = CreateTemporaryValidConfig();
 
             SetPrivateField(_attack, typeof(RangedAttack), "_config", _config);
             SetPrivateField(_attack, typeof(RangedAttack), "_projectileSpawnerSource", _spawner);
@@ -124,7 +133,7 @@ namespace Tests.EditMode.Combat
             yield return null;
 
             // Esperar que se registre el mensaje de error por la configuración faltante
-            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Missing RangedAttackConfig"));
+            LogAssert.Expect(UnityEngine.LogType.Error, new System.Text.RegularExpressions.Regex("Missing RangedAttackConfig"));
 
             var request = new AttackRequest(new EntityId(1), Vector2.zero, Vector2.right, 10);
             var result = _attack.Execute(request);
@@ -140,7 +149,7 @@ namespace Tests.EditMode.Combat
             _gameObject.SetActive(false);
 
             _attack = _gameObject.AddComponent<RangedAttack>();
-            _config = CreateValidConfigClone();
+            _config = CreateTemporaryValidConfig();
 
             SetPrivateField(_attack, typeof(RangedAttack), "_config", _config);
             SetPrivateField(_attack, typeof(RangedAttack), "_projectileSpawnerSource", null);
@@ -149,7 +158,7 @@ namespace Tests.EditMode.Combat
             yield return null;
 
             // Esperar que se registre el mensaje de error por el spawner faltante
-            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Projectile spawner component does not implement IProjectileSpawner"));
+            LogAssert.Expect(UnityEngine.LogType.Error, new System.Text.RegularExpressions.Regex("Projectile spawner component does not implement IProjectileSpawner"));
 
             var request = new AttackRequest(new EntityId(1), Vector2.zero, Vector2.right, 10);
             var result = _attack.Execute(request);

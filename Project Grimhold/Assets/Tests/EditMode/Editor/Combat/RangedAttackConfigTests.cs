@@ -20,12 +20,22 @@ namespace Tests.EditMode.Combat
             }
         }
 
-        private static RangedAttackConfig CreateValidConfigClone()
+        private const string RealConfigPath = "Assets/Scriptable Objects/RangedAttackConfig.asset";
+
+        private static RangedAttackConfig CreateTemporaryValidConfig()
         {
-            const string AssetPath = "Assets/ScriptableObjects/RangedAttackConfig.asset";
-            RangedAttackConfig source = AssetDatabase.LoadAssetAtPath<RangedAttackConfig>(AssetPath);
-            Assert.That(source, Is.Not.Null, $"Could not load valid config at {AssetPath}.");
-            return Object.Instantiate(source);
+            var config = ScriptableObject.CreateInstance<RangedAttackConfig>();
+
+            SetPrivateField(config, typeof(AttackConfig), "_damage", 10f);
+            SetPrivateField(config, typeof(AttackConfig), "_cooldownSeconds", 0.5f);
+            SetPrivateField(config, "_projectileSpeed", 10f);
+            SetPrivateField(config, "_lifetimeSeconds", 5f);
+            SetPrivateField(config, "_maxRange", 10f);
+            SetPrivateField(config, "_projectileSpawnOffset", 0.7f);
+            SetPrivateField(config, "_projectilePrefab", new NetworkPrefabRef("00000000000000000000000000000001"));
+            SetPrivateField(config, "_impactLayerMask", new LayerMask { value = 1 });
+
+            return config;
         }
 
         private static void SetPrivateField<T>(object target, System.Type declaringType, string fieldName, T value)
@@ -43,7 +53,7 @@ namespace Tests.EditMode.Combat
         [Test]
         public void TryValidate_WithInvalidDamage_Fails()
         {
-            _config = CreateValidConfigClone();
+            _config = CreateTemporaryValidConfig();
             SetPrivateField(_config, typeof(AttackConfig), "_damage", 0f);
 
             bool result = _config.TryValidate(out string error);
@@ -54,7 +64,7 @@ namespace Tests.EditMode.Combat
         [Test]
         public void TryValidate_WithInvalidSpeed_Fails()
         {
-            _config = CreateValidConfigClone();
+            _config = CreateTemporaryValidConfig();
             SetPrivateField(_config, "_projectileSpeed", 0f);
 
             bool result = _config.TryValidate(out string error);
@@ -65,7 +75,7 @@ namespace Tests.EditMode.Combat
         [Test]
         public void TryValidate_WithInvalidLifetime_Fails()
         {
-            _config = CreateValidConfigClone();
+            _config = CreateTemporaryValidConfig();
             SetPrivateField(_config, "_lifetimeSeconds", -1f);
 
             bool result = _config.TryValidate(out string error);
@@ -76,7 +86,7 @@ namespace Tests.EditMode.Combat
         [Test]
         public void TryValidate_WithInvalidRange_Fails()
         {
-            _config = CreateValidConfigClone();
+            _config = CreateTemporaryValidConfig();
             SetPrivateField(_config, "_maxRange", 0f);
 
             bool result = _config.TryValidate(out string error);
@@ -87,7 +97,7 @@ namespace Tests.EditMode.Combat
         [Test]
         public void TryValidate_WithNegativeOffset_Fails()
         {
-            _config = CreateValidConfigClone();
+            _config = CreateTemporaryValidConfig();
             SetPrivateField(_config, "_projectileSpawnOffset", -0.5f);
 
             bool result = _config.TryValidate(out string error);
@@ -98,7 +108,7 @@ namespace Tests.EditMode.Combat
         [Test]
         public void TryValidate_WithEmptyLayerMask_Fails()
         {
-            _config = CreateValidConfigClone();
+            _config = CreateTemporaryValidConfig();
             SetPrivateField(_config, "_impactLayerMask", new LayerMask { value = 0 });
 
             bool result = _config.TryValidate(out string error);
@@ -109,7 +119,9 @@ namespace Tests.EditMode.Combat
         [Test]
         public void TryValidate_WithRealConfigAsset_Passes()
         {
-            _config = CreateValidConfigClone();
+            RangedAttackConfig source = AssetDatabase.LoadAssetAtPath<RangedAttackConfig>(RealConfigPath);
+            Assert.That(source, Is.Not.Null, "Ranged attack config asset was not found at the expected project path.");
+            _config = Object.Instantiate(source);
             bool result = _config.TryValidate(out string error);
             Assert.IsTrue(result, _config.name + " " + error);
         }

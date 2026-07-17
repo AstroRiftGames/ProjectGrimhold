@@ -3,27 +3,82 @@ using UnityEngine;
 
 /// <summary>
 /// Associative entity registry for a NetworkRunner.
-/// Maps efficiently from EntityId to IDamageable and from Collider2D to EntityId
-/// without incurring GetComponent calls in combat simulation loops.
+/// Maps efficiently from EntityId to IDamageable, IInteractable, and from Collider2D to EntityId
+/// without incurring GetComponent calls in simulation loops.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class EntityRegistry : MonoBehaviour
 {
     private readonly Dictionary<EntityId, IDamageable> _entities = new();
+    private readonly Dictionary<EntityId, IInteractable> _interactables = new();
     private readonly Dictionary<Collider2D, EntityId> _colliders = new();
 
     /// <summary>
     /// Attempts to register an entity and its associated colliders.
+    /// Backward-compatible wrapper for damageable-only registrations.
     /// </summary>
     public bool TryRegister(EntityId id, IDamageable damageable, IReadOnlyList<Collider2D> colliders)
     {
-        if (damageable == null)
+        return TryRegisterEntity(id, damageable, colliders);
+    }
+
+    /// <summary>
+    /// Removes an entity and its associated colliders from the registry.
+    /// Backward-compatible wrapper for damageable-only unregistrations.
+    /// </summary>
+    public void Unregister(EntityId id, IReadOnlyList<Collider2D> colliders)
+    {
+        if (_entities.TryGetValue(id, out var damageable))
+        {
+            TryUnregisterEntity(id, damageable);
+        }
+    }
+
+    /// <summary>
+    /// Registers any IEntity (which might implement IDamageable, IInteractable, or both) and its colliders.
+    /// </summary>
+    public bool TryRegisterEntity(EntityId id, IEntity entity, IReadOnlyList<Collider2D> colliders)
+    {
+        if (entity == null)
         {
             return false;
         }
 
-        _entities[id] = damageable;
+        if (id.Value == 0)
+        {
+            return false;
+        }
 
+        if (entity.Id != id)
+        {
+            return false;
+        }
+
+        // Validate colliders are not registered to someone else
+        if (colliders != null)
+        {
+            for (int i = 0; i < colliders.Count; i++)
+            {
+                Collider2D col = colliders[i];
+                if (col != null && _colliders.TryGetValue(col, out var existingId) && existingId != id)
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Register contracts
+        if (entity is IDamageable damageable)
+        {
+            _entities[id] = damageable;
+        }
+
+        if (entity is IInteractable interactable)
+        {
+            _interactables[id] = interactable;
+        }
+
+        // Register colliders
         if (colliders != null)
         {
             for (int i = 0; i < colliders.Count; i++)
@@ -40,23 +95,52 @@ public sealed class EntityRegistry : MonoBehaviour
     }
 
     /// <summary>
-    /// Removes an entity and its associated colliders from the registry.
+    /// Unregisters an entity, clearing its contracts and colliders.
     /// </summary>
-    public void Unregister(EntityId id, IReadOnlyList<Collider2D> colliders)
+    public bool TryUnregisterEntity(EntityId id, IEntity expectedEntity)
     {
-        _entities.Remove(id);
-
-        if (colliders != null)
+        if (expectedEntity == null)
         {
-            for (int i = 0; i < colliders.Count; i++)
+            return false;
+        }
+
+        // Check damageable mapping
+        bool hasDamageable = _entities.TryGetValue(id, out var damageable);
+        bool hasInteractable = _interactables.TryGetValue(id, out var interactable);
+
+        if (hasDamageable && damageable != expectedEntity)
+        {
+            return false;
+        }
+        if (hasInteractable && interactable != expectedEntity)
+        {
+            return false;
+        }
+        if (!hasDamageable && !hasInteractable)
+        {
+            return false;
+        }
+
+        // Remove contracts
+        _entities.Remove(id);
+        _interactables.Remove(id);
+
+        // Remove colliders associated with this ID
+        List<Collider2D> keysToRemove = new List<Collider2D>();
+        foreach (var pair in _colliders)
+        {
+            if (pair.Value == id)
             {
-                Collider2D col = colliders[i];
-                if (col != null)
-                {
-                    _colliders.Remove(col);
-                }
+                keysToRemove.Add(pair.Key);
             }
         }
+
+        for (int i = 0; i < keysToRemove.Count; i++)
+        {
+            _colliders.Remove(keysToRemove[i]);
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -65,6 +149,14 @@ public sealed class EntityRegistry : MonoBehaviour
     public bool TryGetDamageable(EntityId id, out IDamageable damageable)
     {
         return _entities.TryGetValue(id, out damageable);
+    }
+
+    /// <summary>
+    /// Attempts to retrieve an interactable entity by its EntityId.
+    /// </summary>
+    public bool TryGetInteractable(EntityId id, out IInteractable interactable)
+    {
+        return _interactables.TryGetValue(id, out interactable);
     }
 
     /// <summary>
