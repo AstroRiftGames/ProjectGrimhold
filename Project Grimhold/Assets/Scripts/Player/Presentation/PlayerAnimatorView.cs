@@ -22,10 +22,17 @@ public sealed class PlayerAnimatorView : MonoBehaviour
 
     private bool _hashesInitialized;
 
+    private Vector2? _temporalFacingDirection;
+
     private void Awake()
     {
         InitializeHashes();
         CacheDependencies();
+    }
+
+    private void OnDisable()
+    {
+        _temporalFacingDirection = null;
     }
 
     private void LateUpdate()
@@ -40,7 +47,20 @@ public sealed class PlayerAnimatorView : MonoBehaviour
             InitializeHashes();
         }
 
-        Vector2 facing = _movementController.FacingDirection;
+        Vector2 facing;
+        bool isMoving;
+
+        if (_temporalFacingDirection.HasValue)
+        {
+            facing = _temporalFacingDirection.Value;
+            isMoving = false;
+        }
+        else
+        {
+            facing = _movementController.FacingDirection;
+            isMoving = _movementController.IsMoving;
+        }
+
         if (facing.sqrMagnitude < 0.001f)
         {
             facing = Vector2.down;
@@ -48,7 +68,29 @@ public sealed class PlayerAnimatorView : MonoBehaviour
 
         _animator.SetFloat(_moveXHash, facing.x);
         _animator.SetFloat(_moveYHash, facing.y);
-        _animator.SetBool(_isMovingHash, _movementController.IsMoving);
+        _animator.SetBool(_isMovingHash, isMoving);
+    }
+
+    /// <summary>
+    /// Applies a temporal facing direction (e.g. for attack presentation) that overrides locomotion facing direction.
+    /// During temporal facing, the movement state is forced to IsMoving = false.
+    /// </summary>
+    /// <param name="direction">The direction to face.</param>
+    public void ApplyTemporalFacingDirection(Vector2 direction)
+    {
+        if (direction.sqrMagnitude < 0.0001f)
+        {
+            return;
+        }
+        _temporalFacingDirection = direction.normalized;
+    }
+
+    /// <summary>
+    /// Clears any temporal facing direction, returning the animator to standard locomotion state.
+    /// </summary>
+    public void ClearTemporalFacingDirection()
+    {
+        _temporalFacingDirection = null;
     }
 
     private void InitializeHashes()

@@ -20,6 +20,10 @@ PrefabInstance:
       propertyPath: m_Color.r
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 2199920047182287500, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: _weaponHandDistance
+      value: 0.5
+      objectReference: {fileID: 0}
     - target: {fileID: 2520259848855165086, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -88,6 +92,26 @@ PrefabInstance:
       propertyPath: m_Name
       value: NetworkPlayerMelee
       objectReference: {fileID: 0}
+    - target: {fileID: 4522316450052852347, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 2367107257886515543, guid: aa9c4fa7cd37db3469cd79ff7593f6c9, type: 3}
+    - target: {fileID: 4522316450052852347, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4522316450052852347, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_WasSpriteAssigned
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6727737383359403759, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6727737383359403759, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -102,6 +126,22 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 1716456465337594484}
   m_SourcePrefab: {fileID: 100100000, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+--- !u!4 &2070722618038890248 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5496709202239764530, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+  m_PrefabInstance: {fileID: 5833451083347531578}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &3682681716924389183 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7201000000000000005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+  m_PrefabInstance: {fileID: 5833451083347531578}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7806615118508775566}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f321d6c52d4b4f6a9d3b7e3f1f0a6242, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!114 &6260509138164896363 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 438361259854513489, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
@@ -158,9 +198,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c8c6d99b204c70409a702b3c4a8a24a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MeleeAttackGizmoDrawer
-  _attackOrigin: {fileID: 0}
-  _config: {fileID: 0}
-  _movementController: {fileID: 0}
+  _attackOrigin: {fileID: 2070722618038890248}
+  _config: {fileID: 11400000, guid: 51a16f09a8a5c954dbf55fa2549aed51, type: 2}
+  _movementController: {fileID: 3682681716924389183}
 --- !u!114 &9212628843141754290 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 3399445609163750024, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
