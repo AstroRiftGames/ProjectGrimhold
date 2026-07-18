@@ -13,4 +13,4 @@ MonoBehaviour:
   m_Name: LootDefinitionCatalog
   m_EditorClassIdentifier: Assembly-CSharp::LootDefinitionCatalog
   _definitions:
-  - {fileID: 11400000, guid: 588f98d3ce1283d47adcf8bc420f12d5, type: 3}
+  - {fileID: 11400000, guid: 588f98d3ce1283d47adcf8bc420f12d5, type: 2}

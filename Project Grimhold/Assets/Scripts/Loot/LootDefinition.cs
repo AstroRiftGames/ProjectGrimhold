@@ -32,6 +32,7 @@ public sealed class LootDefinition : ScriptableObject
     private int _defaultPickupQuantity = 1;
 
     public string Id => _id;
+    public LootId LootId => new LootId(_id);
     public string DisplayName => _displayName;
     public Sprite Icon => _icon;
     public Sprite WorldSprite => _worldSprite;

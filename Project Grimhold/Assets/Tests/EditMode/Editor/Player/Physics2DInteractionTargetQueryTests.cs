@@ -219,7 +219,7 @@ namespace Tests.EditMode.Player
             public EntityId Id => new EntityId(IdValue);
 
             public bool CanInteract(in InteractionRequest request) => true;
-            public InteractionResult Interact(in InteractionRequest request) => new InteractionResult(true, true, "");
+            public InteractionResult Interact(in InteractionRequest request) => InteractionResult.Succeeded(true);
         }
     }
 }

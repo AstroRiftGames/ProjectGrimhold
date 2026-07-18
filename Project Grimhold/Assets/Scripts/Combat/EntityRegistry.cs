@@ -11,6 +11,7 @@ public sealed class EntityRegistry : MonoBehaviour
 {
     private readonly Dictionary<EntityId, IDamageable> _entities = new();
     private readonly Dictionary<EntityId, IInteractable> _interactables = new();
+    private readonly Dictionary<EntityId, ILootReceiver> _lootReceivers = new();
     private readonly Dictionary<Collider2D, EntityId> _colliders = new();
 
     /// <summary>
@@ -78,6 +79,11 @@ public sealed class EntityRegistry : MonoBehaviour
             _interactables[id] = interactable;
         }
 
+        if (entity is ILootReceiver lootReceiver)
+        {
+            _lootReceivers[id] = lootReceiver;
+        }
+
         // Register colliders
         if (colliders != null)
         {
@@ -107,6 +113,7 @@ public sealed class EntityRegistry : MonoBehaviour
         // Check damageable mapping
         bool hasDamageable = _entities.TryGetValue(id, out var damageable);
         bool hasInteractable = _interactables.TryGetValue(id, out var interactable);
+        bool hasLootReceiver = _lootReceivers.TryGetValue(id, out var lootReceiver);
 
         if (hasDamageable && damageable != expectedEntity)
         {
@@ -116,7 +123,11 @@ public sealed class EntityRegistry : MonoBehaviour
         {
             return false;
         }
-        if (!hasDamageable && !hasInteractable)
+        if (hasLootReceiver && lootReceiver != expectedEntity)
+        {
+            return false;
+        }
+        if (!hasDamageable && !hasInteractable && !hasLootReceiver)
         {
             return false;
         }
@@ -124,6 +135,7 @@ public sealed class EntityRegistry : MonoBehaviour
         // Remove contracts
         _entities.Remove(id);
         _interactables.Remove(id);
+        _lootReceivers.Remove(id);
 
         // Remove colliders associated with this ID
         List<Collider2D> keysToRemove = new List<Collider2D>();
@@ -157,6 +169,14 @@ public sealed class EntityRegistry : MonoBehaviour
     public bool TryGetInteractable(EntityId id, out IInteractable interactable)
     {
         return _interactables.TryGetValue(id, out interactable);
+    }
+
+    /// <summary>
+    /// Attempts to retrieve a loot receiver entity by its EntityId.
+    /// </summary>
+    public bool TryGetLootReceiver(EntityId id, out ILootReceiver lootReceiver)
+    {
+        return _lootReceivers.TryGetValue(id, out lootReceiver);
     }
 
     /// <summary>

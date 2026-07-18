@@ -193,7 +193,7 @@ namespace Tests.EditMode.Player
             public InteractionResult Interact(in InteractionRequest request)
             {
                 WasInteracted = true;
-                return new InteractionResult(_interactSuccess, true, "");
+                return _interactSuccess ? InteractionResult.Succeeded(true) : InteractionResult.Rejected(InteractionFailureReason.InvalidTarget);
             }
         }
     }
