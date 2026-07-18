@@ -180,6 +180,51 @@ public sealed class EntityRegistry : MonoBehaviour
     }
 
     /// <summary>
+    /// Registers a loot receiver mapping separate from other entities' contracts.
+    /// </summary>
+    public bool TryRegisterLootReceiver(EntityId id, ILootReceiver receiver)
+    {
+        if (receiver == null || id.Value == 0 || receiver.Id != id)
+        {
+            return false;
+        }
+
+        if (_lootReceivers.TryGetValue(id, out var existing))
+        {
+            if (existing == receiver)
+            {
+                return true; // Idempotent on same instance
+            }
+            return false; // Rejects conflicts
+        }
+
+        _lootReceivers[id] = receiver;
+        return true;
+    }
+
+    /// <summary>
+    /// Unregisters a loot receiver mapping safely without removing other capacities.
+    /// </summary>
+    public bool TryUnregisterLootReceiver(EntityId id, ILootReceiver expectedReceiver)
+    {
+        if (expectedReceiver == null || id.Value == 0)
+        {
+            return false;
+        }
+
+        if (_lootReceivers.TryGetValue(id, out var existing))
+        {
+            if (existing == expectedReceiver)
+            {
+                _lootReceivers.Remove(id);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Attempts to retrieve the EntityId that owns a given Collider2D.
     /// </summary>
     public bool TryGetEntityId(Collider2D collider, out EntityId id)

@@ -170,7 +170,7 @@ namespace Tests.EditMode.Loot
             var id = new EntityId(123);
             var receiver = new StubLootReceiver(id);
 
-            bool registered = registry.TryRegisterEntity(id, receiver, new Collider2D[0]);
+            bool registered = registry.TryRegisterLootReceiver(id, receiver);
             Assert.IsTrue(registered);
 
             bool found = registry.TryGetLootReceiver(id, out var foundReceiver);
@@ -191,13 +191,13 @@ namespace Tests.EditMode.Loot
             var receiver1 = new StubLootReceiver(id1);
             var receiver2 = new StubLootReceiver(id2);
 
-            bool r1 = registry.TryRegisterEntity(id1, receiver1, new Collider2D[0]);
-            bool r2 = registry.TryRegisterEntity(id2, receiver2, new Collider2D[0]);
+            bool r1 = registry.TryRegisterLootReceiver(id1, receiver1);
+            bool r2 = registry.TryRegisterLootReceiver(id2, receiver2);
             Assert.IsTrue(r1);
             Assert.IsTrue(r2);
 
             // Unregister first one
-            bool unregistered = registry.TryUnregisterEntity(id1, receiver1);
+            bool unregistered = registry.TryUnregisterLootReceiver(id1, receiver1);
             Assert.IsTrue(unregistered);
 
             Assert.IsFalse(registry.TryGetLootReceiver(id1, out _));
@@ -218,19 +218,19 @@ namespace Tests.EditMode.Loot
             var receiverNew = new StubLootReceiver(id);
 
             // Register first
-            bool r1 = registry.TryRegisterEntity(id, receiverOld, new Collider2D[0]);
+            bool r1 = registry.TryRegisterLootReceiver(id, receiverOld);
             Assert.IsTrue(r1);
 
             // Unregister old
-            bool u1 = registry.TryUnregisterEntity(id, receiverOld);
+            bool u1 = registry.TryUnregisterLootReceiver(id, receiverOld);
             Assert.IsTrue(u1);
 
             // Register new
-            bool r2 = registry.TryRegisterEntity(id, receiverNew, new Collider2D[0]);
+            bool r2 = registry.TryRegisterLootReceiver(id, receiverNew);
             Assert.IsTrue(r2);
 
             // Try to unregister using old reference
-            bool u2 = registry.TryUnregisterEntity(id, receiverOld);
+            bool u2 = registry.TryUnregisterLootReceiver(id, receiverOld);
             Assert.IsFalse(u2);
 
             // Verify new receiver remains registered
@@ -238,6 +238,57 @@ namespace Tests.EditMode.Loot
             Assert.IsTrue(found);
             Assert.That(resolved, Is.SameAs(receiverNew));
 
+            UnityEngine.Object.DestroyImmediate(registryHolder);
+        }
+
+        private sealed class DummyDamageable : IDamageable
+        {
+            public EntityId Id { get; }
+            public bool CanReceiveDamage => true;
+
+            public DummyDamageable(EntityId id)
+            {
+                Id = id;
+            }
+
+            public DamageResult ApplyDamage(in DamageRequest request)
+            {
+                return new DamageResult(Id, true, request.Amount, 0f, true, DamageFailureReason.None);
+            }
+        }
+
+        [Test]
+        public void EntityRegistry_CapacitiesCoexistAndUnregisterIndependently()
+        {
+            var registryHolder = new GameObject("EntityRegistryHolder");
+            var registry = registryHolder.AddComponent<EntityRegistry>();
+
+            var id = new EntityId(999);
+            var receiver = new StubLootReceiver(id);
+            var damageable = new DummyDamageable(id);
+
+            // Register damageable via standard path
+            bool rD = registry.TryRegisterEntity(id, damageable, new Collider2D[0]);
+            Assert.IsTrue(rD);
+
+            // Register loot receiver via custom path
+            bool rL = registry.TryRegisterLootReceiver(id, receiver);
+            Assert.IsTrue(rL);
+
+            // Both should coexist under same EntityId
+            Assert.IsTrue(registry.TryGetDamageable(id, out var resolvedDamageable));
+            Assert.That(resolvedDamageable, Is.SameAs(damageable));
+
+            Assert.IsTrue(registry.TryGetLootReceiver(id, out var resolvedLoot));
+            Assert.That(resolvedLoot, Is.SameAs(receiver));
+
+            // Unregistering LootReceiver should not remove Damageable
+            bool uL = registry.TryUnregisterLootReceiver(id, receiver);
+            Assert.IsTrue(uL);
+            Assert.IsFalse(registry.TryGetLootReceiver(id, out _));
+            Assert.IsTrue(registry.TryGetDamageable(id, out _));
+
+            // Clean up
             UnityEngine.Object.DestroyImmediate(registryHolder);
         }
 

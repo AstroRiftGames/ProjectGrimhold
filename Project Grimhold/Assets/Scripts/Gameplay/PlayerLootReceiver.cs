@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Fusion;
 using UnityEngine;
 
 /// <summary>
@@ -7,51 +8,60 @@ using UnityEngine;
 /// Integrates with EntityRegistry using the player's EntityId.
 /// </summary>
 [DisallowMultipleComponent]
-public sealed class PlayerLootReceiver : MonoBehaviour, ILootReceiver
+public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver
 {
     private readonly Dictionary<LootId, int> _lootInventory = new();
-    private EntityId _registeredId;
     private EntityRegistry _registry;
-    private Collider2D[] _cachedColliders;
+    private ICharacter _character;
     private bool _isRegistered;
+    private EntityId _registeredId;
 
-    public EntityId Id
+    public new EntityId Id
     {
         get
         {
-            var character = GetComponent<ICharacter>();
-            if (character != null)
+            if (_character != null)
             {
-                return character.Id;
+                return _character.Id;
             }
-            return new EntityId(gameObject.GetHashCode());
+            return default;
         }
     }
 
     private void Awake()
     {
-        _cachedColliders = GetComponentsInChildren<Collider2D>(true);
+        _character = GetComponent<ICharacter>();
     }
 
-    private void Start()
+    public override void Spawned()
     {
-        var runner = GetComponentInParent<Fusion.NetworkRunner>();
-        if (runner != null)
+        if (_character == null)
         {
-            _registry = runner.GetComponent<EntityRegistry>();
-            if (_registry != null)
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: No component implementing {nameof(ICharacter)} is found on {gameObject.name}.", this);
+            return;
+        }
+
+        _registry = Runner.GetComponent<EntityRegistry>();
+        if (_registry != null)
+        {
+            _registeredId = Id;
+            _isRegistered = _registry.TryRegisterLootReceiver(_registeredId, this);
+            if (!_isRegistered)
             {
-                _registeredId = Id;
-                _isRegistered = _registry.TryRegisterEntity(_registeredId, this, _cachedColliders);
+                Debug.LogError($"{nameof(PlayerLootReceiver)}: Failed to register to {nameof(EntityRegistry)} with ID {_registeredId}.", this);
             }
+        }
+        else
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: EntityRegistry was not found on the NetworkRunner.", this);
         }
     }
 
-    private void OnDestroy()
+    public override void Despawned(NetworkRunner runner, bool hasState)
     {
         if (_isRegistered && _registry != null)
         {
-            _registry.TryUnregisterEntity(_registeredId, this);
+            _registry.TryUnregisterLootReceiver(_registeredId, this);
             _isRegistered = false;
         }
     }
