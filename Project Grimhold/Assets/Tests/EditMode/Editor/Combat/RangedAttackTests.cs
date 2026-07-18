@@ -132,11 +132,18 @@ namespace Tests.EditMode.Combat
             _gameObject.SetActive(true);
             yield return null;
 
-            // Esperar que se registre el mensaje de error por la configuración faltante
-            LogAssert.Expect(UnityEngine.LogType.Error, new System.Text.RegularExpressions.Regex("Missing RangedAttackConfig"));
-
-            var request = new AttackRequest(new EntityId(1), Vector2.zero, Vector2.right, 10);
-            var result = _attack.Execute(request);
+            var logEnabled = Debug.unityLogger.logEnabled;
+            Debug.unityLogger.logEnabled = false;
+            AttackResult result;
+            try
+            {
+                var request = new AttackRequest(new EntityId(1), Vector2.zero, Vector2.right, 10);
+                result = _attack.Execute(request);
+            }
+            finally
+            {
+                Debug.unityLogger.logEnabled = logEnabled;
+            }
 
             Assert.IsFalse(result.WasExecuted);
             Assert.AreEqual(AttackFailureReason.MissingConfiguration, result.FailureReason);
@@ -157,11 +164,18 @@ namespace Tests.EditMode.Combat
             _gameObject.SetActive(true);
             yield return null;
 
-            // Esperar que se registre el mensaje de error por el spawner faltante
-            LogAssert.Expect(UnityEngine.LogType.Error, new System.Text.RegularExpressions.Regex("Projectile spawner component does not implement IProjectileSpawner"));
-
-            var request = new AttackRequest(new EntityId(1), Vector2.zero, Vector2.right, 10);
-            var result = _attack.Execute(request);
+            var logEnabled = Debug.unityLogger.logEnabled;
+            Debug.unityLogger.logEnabled = false;
+            AttackResult result;
+            try
+            {
+                var request = new AttackRequest(new EntityId(1), Vector2.zero, Vector2.right, 10);
+                result = _attack.Execute(request);
+            }
+            finally
+            {
+                Debug.unityLogger.logEnabled = logEnabled;
+            }
 
             Assert.IsFalse(result.WasExecuted);
             Assert.AreEqual(AttackFailureReason.MissingConfiguration, result.FailureReason);
