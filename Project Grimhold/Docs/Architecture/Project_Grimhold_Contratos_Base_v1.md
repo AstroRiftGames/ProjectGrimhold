@@ -2,8 +2,8 @@
 
 > [!NOTE]
 > **Proyecto:** Project Grimhold  
-> **Estado:** Borrador v2  
-> **Última modificación:** 2026-07-14
+> **Estado:** Aprobado / Finalizado v1  
+> **Última modificación:** 2026-07-18
 
 ---
 

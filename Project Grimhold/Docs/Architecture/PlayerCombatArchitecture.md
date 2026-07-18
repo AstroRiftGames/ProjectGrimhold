@@ -207,6 +207,32 @@ A network component that validates damage rules:
 
 ---
 
+## Combat Presentation & Character Defeat Cycle
+
+The combat system coordinates gameplay state with the visual presentation layer through decoupled events and synchronized networked variables. This ensures visual changes have zero impact on the simulation's determinism.
+
+### 1. Damage Feedback Visuals
+When a character takes damage (authoritatively confirmed by `Health` changes on State Authority):
+* Presentation components (`PlayerDamagePresenter`) trigger procedural feedback.
+* **Sprite Flash**: Temporarily overrides the character's material colors to a bright flash color to signify a hit.
+* **Scale Pulse**: Briefly scales the character's transform down/up to provide physical impact feedback.
+* These reactions run completely client-side in the presentation loop (`Render` or via network property changed callbacks).
+
+### 2. Player Defeat and Visual Hiding
+When player health drops to or below zero, a strict death/defeat pipeline is executed:
+* **Gameplay Simulation Disabling**: 
+  * The character's alive status (`IsAlive = false`) immediately disables movement input and combat actions in `FixedUpdateNetwork`.
+  * Ongoing attack timers and active projectile spawns are halted.
+* **Presentation Transition**:
+  * Visual presentation components (`PlayerDefeatPresenter`, `PlayerAnimatorView`) detect the transition to the dead state.
+  * **Immediate Action Hiding**: Combat visual effects, attack animations, and movement indicators are stopped immediately (visual priority: Defeat > Damage Feedback > Attack > Locomotion).
+  * **Procedural Hiding Delay**: The player's physical representation (sprite renderers, shadows, visual parts) remains visible in a defeated pose for a configurable delay. After the delay, the visuals are faded out or hidden completely.
+  * Gameplay components (such as `NetworkObject`, health variables, colliders, and network controllers) remain active to support the multiplayer session lifecycle.
+* **Remote Proxy Synchronization**:
+  * Proxies track health transitions and reproduce the defeat pose and fadeout sequence procedurally, guaranteeing visual consistency across all peers.
+
+---
+
 ## Prefab and Asset Dependencies
 
 ### 1. Player Prefab
