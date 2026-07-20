@@ -428,7 +428,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f321d6c52d4b4f6a9d3b7e3f1f0a6242, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _moveSpeed: 1
+  _moveSpeed: 4
   _movementMotor: {fileID: 7201000000000000004}
   _defaultFacingDirection: {x: 0, y: -1}
   _IsControlEnabled:
