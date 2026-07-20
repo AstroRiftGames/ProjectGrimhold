@@ -2030,8 +2030,6 @@ MonoBehaviour:
   _statusText: {fileID: 1630679715}
   meleeClassButton: {fileID: 709411574}
   rangedClassButton: {fileID: 811541306}
-  _meleeSelectedVisual: {fileID: 0}
-  _rangedSelectedVisual: {fileID: 0}
 --- !u!1 &1368105770
 GameObject:
   m_ObjectHideFlags: 0

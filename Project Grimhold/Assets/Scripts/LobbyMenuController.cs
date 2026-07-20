@@ -1,7 +1,6 @@
 using Fusion;
 using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class LobbyMenuController : MonoBehaviour
@@ -15,6 +14,7 @@ public class LobbyMenuController : MonoBehaviour
     [SerializeField] private string gameplayScene = "Gameplay";
 
     private NetworkRunner _runner;
+    private FusionSessionLauncher _launcher;
 
     private void OnEnable()
     {
@@ -24,18 +24,17 @@ public class LobbyMenuController : MonoBehaviour
     private void OnDisable()
     {
         _startGameButton.onClick.RemoveListener(StartGame);
-
     }
 
-    public void Initialize(NetworkRunner runner)
+    public void Initialize(NetworkRunner runner, FusionSessionLauncher launcher)
     {
         _runner = runner;
+        _launcher = launcher;
 
         sessionCodeText.text = _runner.SessionInfo.Name;
 
         _startGameButton.gameObject.SetActive(_runner.IsServer);
         _statusText.gameObject.SetActive(!_runner.IsServer);
-
     }
 
     public void RefreshSessionCode()
@@ -48,15 +47,29 @@ public class LobbyMenuController : MonoBehaviour
 
     public async void StartGame()
     {
-        if (_runner == null)
+        if (_runner == null || !_runner.IsServer)
             return;
 
-        // Sólo el Host puede iniciar la partida
-        if (!_runner.IsServer)
-            return;
+        // Prevent multiple simultaneous clicks by disabling the button temporarily
+        _startGameButton.interactable = false;
 
-        await _runner.LoadScene(
-            SceneRef.FromIndex(SceneUtility.GetBuildIndexByScenePath(gameplayScene)),
-            LoadSceneMode.Single);
+        var matchController = _launcher != null ? _launcher.MatchController : null;
+        if (matchController != null)
+        {
+            try
+            {
+                await matchController.StartGameAsync(gameplayScene);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[LobbyMenuController] Failed to start game: {ex.Message}");
+                _startGameButton.interactable = true;
+            }
+        }
+        else
+        {
+            Debug.LogError("[LobbyMenuController] NetworkMatchController instance not found on launcher!");
+            _startGameButton.interactable = true;
+        }
     }
 }
