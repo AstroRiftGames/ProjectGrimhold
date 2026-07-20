@@ -1,10 +1,11 @@
+#if UNITY_INCLUDE_TESTS
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using System.Collections;
 using System.Reflection;
 
-namespace Tests.PlayMode.Player
+namespace Assets.Tests.PlayMode.Player
 {
     public class PlayerInputReaderPlayModeTests
     {
@@ -69,3 +70,5 @@ namespace Tests.PlayMode.Player
         }
     }
 }
+#endif
+
