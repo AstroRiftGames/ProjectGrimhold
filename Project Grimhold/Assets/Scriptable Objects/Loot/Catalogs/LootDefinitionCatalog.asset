@@ -14,3 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LootDefinitionCatalog
   _definitions:
   - {fileID: 11400000, guid: 588f98d3ce1283d47adcf8bc420f12d5, type: 2}
+  - {fileID: 11400000, guid: 0579b9c205ee88a4b8c94315d95afa5e, type: 2}

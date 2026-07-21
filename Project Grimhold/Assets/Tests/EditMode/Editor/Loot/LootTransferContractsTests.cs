@@ -145,15 +145,15 @@ namespace Tests.EditMode.Loot
         }
 
         [Test]
-        public void PlayerLootReceiver_ImplementsOnlyCurrentStoryCapabilities()
+        public void PlayerLootReceiver_ImplementsTemporaryInventoryCapabilities()
         {
             Type receiverType = typeof(PlayerLootReceiver);
 
             Assert.That(typeof(ILootReceiver).IsAssignableFrom(receiverType), Is.True);
             Assert.That(typeof(ILootContentReader).IsAssignableFrom(receiverType), Is.True);
             Assert.That(typeof(ILootQuantityReader).IsAssignableFrom(receiverType), Is.True);
-            Assert.That(typeof(ILootExtractor).IsAssignableFrom(receiverType), Is.False);
-            Assert.That(typeof(ILootSlotCapacityReader).IsAssignableFrom(receiverType), Is.False);
+            Assert.That(typeof(ILootExtractor).IsAssignableFrom(receiverType), Is.True);
+            Assert.That(typeof(ILootSlotCapacityReader).IsAssignableFrom(receiverType), Is.True);
         }
 
         [Test]

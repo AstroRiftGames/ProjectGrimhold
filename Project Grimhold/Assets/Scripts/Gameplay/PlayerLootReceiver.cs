@@ -9,12 +9,20 @@ using UnityEngine;
 /// read-only view to the owning player and other peers observing the player object.
 /// </summary>
 [DisallowMultipleComponent]
-public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootContentReader, ILootQuantityReader
+public sealed class PlayerLootReceiver : NetworkBehaviour,
+    ILootReceiver,
+    ILootExtractor,
+    ILootContentReader,
+    ILootQuantityReader,
+    ILootSlotCapacityReader
 {
     public const int MaxLootTypes = 64;
 
     [SerializeField]
     private LootDefinitionCatalog _lootCatalog;
+
+    [SerializeField, Range(1, MaxLootTypes)]
+    private int _slotCapacity = 16;
 
     [Networked, Capacity(MaxLootTypes)]
     private NetworkDictionary<int, int> LootInventory => default;
@@ -49,6 +57,17 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
     /// Gets the number of distinct loot definitions currently held.
     /// </summary>
     public int DistinctLootCount => LootInventory.Count;
+
+    /// <summary>
+    /// Gets the configured gameplay capacity measured in distinct positive loot stacks.
+    /// </summary>
+    public int SlotCapacity => _slotCapacity;
+
+    /// <summary>
+    /// Gets the number of occupied gameplay slots from the replicated inventory.
+    /// Commits preserve the invariant that every stored quantity is positive.
+    /// </summary>
+    public int OccupiedSlotCount => LootInventory.Count;
 
     public new EntityId Id
     {
@@ -151,6 +170,11 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
             return LootTransferFailureReason.ContainerUnavailable;
         }
 
+        if (!LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes))
+        {
+            return LootTransferFailureReason.ContainerUnavailable;
+        }
+
         if (!_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
         {
             return LootTransferFailureReason.InvalidLoot;
@@ -165,15 +189,22 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
         NetworkDictionary<int, int> inventory = LootInventory;
         bool alreadyHeld = inventory.TryGet(definitionIndex, out int currentAmount);
 
+        LootTransferFailureReason inventoryFailure = LootInventoryRules.ValidateReceive(
+            alreadyHeld,
+            currentAmount,
+            inventory.Count,
+            _slotCapacity,
+            request.RequestedAmount);
+
+        if (inventoryFailure != LootTransferFailureReason.None)
+        {
+            return inventoryFailure;
+        }
+
         if (!alreadyHeld && inventory.Count >= inventory.Capacity)
         {
             Debug.LogError($"{nameof(PlayerLootReceiver)}: Network inventory capacity was exhausted despite validated catalog configuration.", this);
             return LootTransferFailureReason.ContainerUnavailable;
-        }
-
-        if (currentAmount > int.MaxValue - request.RequestedAmount)
-        {
-            return LootTransferFailureReason.Overflow;
         }
 
         return LootTransferFailureReason.None;
@@ -186,6 +217,12 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
     /// </summary>
     public void CommitReceive(in LootTransferRequest request)
     {
+        if (!HasStateAuthority)
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitReceive)} requires State Authority.", this);
+            return;
+        }
+
         if (_lootCatalog == null || !_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
         {
             Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitReceive)} was called without a resolvable validated loot definition.", this);
@@ -193,18 +230,28 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
         }
 
         NetworkDictionary<int, int> inventory = LootInventory;
-        inventory.TryGet(definitionIndex, out int currentAmount);
+        bool alreadyHeld = inventory.TryGet(definitionIndex, out int currentAmount);
+        LootTransferFailureReason inventoryFailure = LootInventoryRules.ValidateReceive(
+            alreadyHeld,
+            currentAmount,
+            inventory.Count,
+            _slotCapacity,
+            request.RequestedAmount);
 
         if (definitionIndex < 0 || definitionIndex >= MaxLootTypes ||
-            request.RequestedAmount <= 0 ||
-            currentAmount > int.MaxValue - request.RequestedAmount ||
+            request.SourceId.Value == 0 ||
+            request.DestinationId != Id ||
+            !LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes) ||
+            inventoryFailure != LootTransferFailureReason.None ||
             (!inventory.ContainsKey(definitionIndex) && inventory.Count >= inventory.Capacity))
         {
             Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitReceive)} preconditions no longer hold. The caller violated the validate/commit contract.", this);
             return;
         }
 
-        inventory.Set(definitionIndex, currentAmount + request.RequestedAmount);
+        inventory.Set(
+            definitionIndex,
+            LootInventoryRules.CalculateReceivedAmount(currentAmount, request.RequestedAmount));
 
         LootChangeSequence++;
         LastGrantedDefinitionIndex = definitionIndex;
@@ -218,6 +265,117 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
             definitionIndex,
             request.RequestedAmount,
             request.SimulationTick);
+    }
+
+    /// <summary>
+    /// Validates a complete loot extraction without mutating replicated state.
+    /// State Authority must call <see cref="CommitExtraction"/> immediately after a
+    /// successful validation and without allowing an intervening state change.
+    /// </summary>
+    public LootTransferFailureReason ValidateExtraction(in LootTransferRequest request)
+    {
+        if (!HasStateAuthority)
+        {
+            return LootTransferFailureReason.MissingAuthority;
+        }
+
+        if (request.SourceId.Value == 0 || request.SourceId != Id)
+        {
+            return LootTransferFailureReason.SourceNotFound;
+        }
+
+        if (request.DestinationId.Value == 0)
+        {
+            return LootTransferFailureReason.DestinationNotFound;
+        }
+
+        if (!request.LootId.IsValid)
+        {
+            return LootTransferFailureReason.InvalidLoot;
+        }
+
+        if (request.RequestedAmount <= 0)
+        {
+            return LootTransferFailureReason.InvalidAmount;
+        }
+
+        if (_lootCatalog == null)
+        {
+            return LootTransferFailureReason.ContainerUnavailable;
+        }
+
+        if (!LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes))
+        {
+            return LootTransferFailureReason.ContainerUnavailable;
+        }
+
+        if (!_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
+        {
+            return LootTransferFailureReason.InvalidLoot;
+        }
+
+        if (definitionIndex < 0 || definitionIndex >= MaxLootTypes)
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: Loot index {definitionIndex} cannot be represented by the network inventory.", this);
+            return LootTransferFailureReason.ContainerUnavailable;
+        }
+
+        NetworkDictionary<int, int> inventory = LootInventory;
+        bool alreadyHeld = inventory.TryGet(definitionIndex, out int currentAmount);
+        return LootInventoryRules.ValidateExtraction(
+            alreadyHeld,
+            currentAmount,
+            request.RequestedAmount);
+    }
+
+    /// <summary>
+    /// Commits a previously validated complete extraction without resolving or
+    /// modifying the destination endpoint.
+    /// </summary>
+    public void CommitExtraction(in LootTransferRequest request)
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitExtraction)} requires State Authority.", this);
+            return;
+        }
+
+        if (_lootCatalog == null || !_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitExtraction)} was called without a resolvable validated loot definition.", this);
+            return;
+        }
+
+        NetworkDictionary<int, int> inventory = LootInventory;
+        bool alreadyHeld = inventory.TryGet(definitionIndex, out int currentAmount);
+        LootTransferFailureReason inventoryFailure = LootInventoryRules.ValidateExtraction(
+            alreadyHeld,
+            currentAmount,
+            request.RequestedAmount);
+
+        if (definitionIndex < 0 || definitionIndex >= MaxLootTypes ||
+            request.SourceId != Id ||
+            request.DestinationId.Value == 0 ||
+            !LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes) ||
+            inventoryFailure != LootTransferFailureReason.None)
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitExtraction)} preconditions no longer hold. The caller violated the validate/commit contract.", this);
+            return;
+        }
+
+        int remainingAmount = LootInventoryRules.CalculateRemainingAmount(
+            currentAmount,
+            request.RequestedAmount);
+        if (remainingAmount == 0)
+        {
+            inventory.Remove(definitionIndex);
+        }
+        else
+        {
+            inventory.Set(definitionIndex, remainingAmount);
+        }
+
+        LootChangeSequence++;
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
@@ -253,7 +411,7 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
             return 0;
         }
 
-        return LootInventory.TryGet(definitionIndex, out int amount) ? amount : 0;
+        return LootInventory.TryGet(definitionIndex, out int amount) && amount > 0 ? amount : 0;
     }
 
     /// <summary>
@@ -293,6 +451,11 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
             }
 
             if (!_lootCatalog.TryGetByIndex(index, out LootDefinition definition))
+            {
+                return false;
+            }
+
+            if (amount <= 0)
             {
                 return false;
             }
@@ -339,7 +502,7 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
         {
             foreach (KeyValuePair<int, int> pair in LootInventory)
             {
-                if (!_lootCatalog.TryGetByIndex(pair.Key, out LootDefinition definition))
+                if (pair.Value <= 0 || !_lootCatalog.TryGetByIndex(pair.Key, out LootDefinition definition))
                 {
                     total = 0;
                     return false;
@@ -377,6 +540,12 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootC
         if (_lootCatalog == null)
         {
             Debug.LogError($"{nameof(PlayerLootReceiver)}: Loot catalog is not assigned on {gameObject.name}.", this);
+            return false;
+        }
+
+        if (!LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes))
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: Slot capacity must be between 1 and {MaxLootTypes}.", this);
             return false;
         }
 

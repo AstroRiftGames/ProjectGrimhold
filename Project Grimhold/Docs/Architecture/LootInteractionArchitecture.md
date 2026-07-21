@@ -43,7 +43,7 @@ Entities implement only the capabilities they require:
 - `ILootReceiver`: prevalidates and commits reception.
 - `ILootExtractor`: prevalidates and commits extraction.
 
-`PlayerLootReceiver` implements content reading, quantity queries, and reception. It does not yet implement extraction or configurable gameplay capacity. A pickup is not an inspectable container and does not implement reading, slots, or extraction.
+`PlayerLootReceiver` implements content reading, quantity queries, gameplay slot capacity, reception, and extraction. A pickup is not an inspectable container and does not implement reading, slots, or extraction.
 
 ## 4. Prevalidation and commit protocol
 
@@ -54,7 +54,7 @@ Reception and extraction explicitly separate two phases:
 
 A commit may run only after prevalidation returns `None`, synchronously, and without State Authority yielding control or allowing an intervening mutation. If its internal preconditions no longer hold, the integration contract has been violated; this is not a normal gameplay rejection.
 
-TASK-30 does not implement an atomic runtime transfer between two storage endpoints. A later task must resolve both endpoints, validate authority, distance, and availability, exclude competing requests, prevalidate both sides, define commit order, and execute both commits without re-entry before producing the single `LootTransferResult`.
+TASK-31 still does not implement an atomic runtime transfer between two storage endpoints. A later task must resolve both endpoints, validate authority, distance, and availability, exclude competing requests, prevalidate both sides, define commit order, and execute both commits without re-entry before producing the single `LootTransferResult`.
 
 ## 5. Authoritative pickup transaction
 
@@ -77,7 +77,11 @@ Interaction retains a general-purpose result: missing authority, destination, an
 
 `PlayerLootReceiver` stores the incursion collection in a `NetworkDictionary<int,int>` attached to the player's `NetworkObject`. State Authority is the only writer. Other peers consume replicated snapshots.
 
-`ValidateReceive` checks authority, IDs, loot, quantity, catalog resolution, representation, and overflow without mutating the collection. `CommitReceive` applies the complete prevalidated quantity, increments `LootChangeSequence`, and preserves the existing presentation integration.
+Gameplay capacity is a positive serialized value on the component, configured to 16 slots on the base network-player prefab and limited to the dictionary's technical maximum. It is not networked and is not derived from the dictionary capacity. `SlotCapacity` exposes that configuration, while `OccupiedSlotCount` is derived from the number of stored keys. Commits preserve the invariant that every stored quantity is positive.
+
+`ValidateReceive` checks authority, IDs, loot, quantity, catalog resolution, representation, overflow, and gameplay capacity without mutating the collection. Existing IDs stack without consuming another slot. A new ID is rejected with `InventoryFull` only when all configured gameplay slots are occupied. `CommitReceive` applies the complete prevalidated quantity, increments `LootChangeSequence`, and preserves the existing presentation integration.
+
+`ValidateExtraction` checks authority, endpoint identities, loot, quantity, catalog resolution, representation, and complete availability without mutation. `CommitExtraction` subtracts the complete prevalidated quantity, removes the key when its amount reaches zero, and increments `LootChangeSequence`. Extraction does not resolve or modify the destination and does not emit a grant presentation event.
 
 The collection registers as `ILootReceiver` in the State Authority runner's `EntityRegistry` and unregisters when the player despawns. Its state is created and destroyed with that object; there is no persistence to a stash, equipment, or another session.
 
@@ -85,15 +89,14 @@ The collection registers as `ILootReceiver` in the State Authority runner's `Ent
 
 `LootChangeSequence`, the RPC directed to Input Authority, and `LootGrantPresentationEvent` remain integration and presentation responsibilities. Transfer contracts do not contain sequences, RPCs, text, icons, presenters, or visual references.
 
-The HUD continues to read snapshots through `TryGetLootContent`, derive value from the local catalog, and deduplicate notifications by sequence. `LootGrantPresentationEvent` remains specific to the current pickup delivery; generalizing it belongs to a later task when container-transfer presentation exists.
+The HUD continues to read snapshots through `TryGetLootContent`, derive value from the local catalog, and observe both reception and extraction through `LootChangeSequence`. `LootGrantPresentationEvent` remains specific to the current pickup delivery; generalizing it belongs to a later task when container-transfer presentation exists.
 
 ## 8. Future work
 
-The following remain outside TASK-30:
+The following remain outside TASK-31:
 
 - Authoritative coordination between an extractable source and a receiving destination.
 - Resolution of new capabilities through `EntityRegistry`.
-- Runtime slot capacity.
 - Containers, chests, corpses, and inspection.
 - Container distance and availability validation.
 - Exclusion of concurrent transfers affecting the same stack.

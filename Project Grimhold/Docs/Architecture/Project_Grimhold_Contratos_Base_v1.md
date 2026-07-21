@@ -266,7 +266,11 @@ Gameplay slots count distinct loot IDs with positive quantities. Increasing an e
 
 The `NetworkDictionary` capacity of 64 used by `PlayerLootReceiver` is a Fusion representation limit, not gameplay slot capacity. Reaching a technical representation constraint must not be reported as `InventoryFull`.
 
-`PlayerLootReceiver` currently implements content reading, quantity queries, and reception. It does not implement extraction or configurable gameplay slots.
+`PlayerLootReceiver` implements content reading, quantity queries, configurable gameplay slots, reception, and extraction. Its serialized slot capacity is positive, cannot exceed the `NetworkDictionary` representation limit, and is configured to 16 on the base network-player prefab. The value is local static configuration rather than replicated state.
+
+State Authority is the only writer. Reception stacks an existing ID regardless of occupied-slot count and rejects a new ID with `InventoryFull` only when the configured gameplay capacity is full. Extraction requires the complete requested quantity, removes an entry when its remainder reaches zero, and never stores zero or negative quantities. Both successful commits increment `LootChangeSequence`, allowing Input Authority presentation to refresh from the replicated read-only snapshot.
+
+The temporary inventory has the same lifecycle as the player's `NetworkObject`. Player despawn or runner shutdown destroys its replicated contents, local presentation queues are cleared during despawn, and a player spawned in a later session starts from an empty network collection. No loot state is persisted in static fields, services, or `ScriptableObject` assets.
 
 ## 10. Loot prevalidation and commit protocol
 
@@ -297,7 +301,7 @@ void CommitExtraction(in LootTransferRequest request);
 
 If a commit cannot apply the prevalidated amount, the caller or implementation violated the protocol. That condition must be diagnosed as an integration/programming error rather than converted into a late gameplay rejection.
 
-TASK-30 defines these endpoint preconditions but does not implement an atomic runtime transfer between two storage endpoints. There is deliberately no `ILootTransferCoordinator` contract yet.
+TASK-31 implements the player endpoint capabilities but does not implement an atomic runtime transfer between two storage endpoints. There is deliberately no `ILootTransferCoordinator` contract yet.
 
 ## 11. Authoritative pickup integration
 
@@ -328,7 +332,7 @@ A future authoritative coordinator must:
 6. Execute both commits synchronously without re-entry or yielding control.
 7. Produce the single `LootTransferResult`.
 
-That later work also owns capability registration for extractable containers and Host/Client tests for storage-to-storage transfers. TASK-30 does not claim those guarantees.
+That later work also owns capability registration for extractable containers and Host/Client tests for storage-to-storage transfers. TASK-31 does not claim those guarantees.
 
 ## 13. Presentation contracts
 

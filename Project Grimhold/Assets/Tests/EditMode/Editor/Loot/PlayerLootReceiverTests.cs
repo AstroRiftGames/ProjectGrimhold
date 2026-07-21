@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEngine;
 
 namespace Tests.EditMode.Loot
 {
@@ -19,6 +20,17 @@ namespace Tests.EditMode.Loot
         public void MaxLootTypes_MatchesNetworkDictionaryCapacityContract()
         {
             Assert.That(PlayerLootReceiver.MaxLootTypes, Is.EqualTo(64));
+        }
+
+        [Test]
+        public void DefaultSlotCapacity_IsExplicitGameplayConfiguration()
+        {
+            var holder = new GameObject(nameof(DefaultSlotCapacity_IsExplicitGameplayConfiguration));
+            var receiver = holder.AddComponent<PlayerLootReceiver>();
+
+            Assert.That(receiver.SlotCapacity, Is.EqualTo(16));
+
+            Object.DestroyImmediate(holder);
         }
 
         [Test]
