@@ -17,7 +17,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
     private PlayerClassCatalog _playerClassCatalog;
 
     [SerializeField]
-    private NetworkPrefabRef _enemyPrefab;
+    private NetworkPrefabRef[] _enemyPrefabs;
 
     [Header("Coordinator Configuration")]
     [SerializeField]
@@ -69,7 +69,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
             // 1. Create and associate the NetworkSpawnManager with the runner before callbacks/StartGame
             _spawnManager = _runnerObject.AddComponent<NetworkSpawnManager>();
-            if (!_spawnManager.InitializeForRunner(_runner, _playerClassCatalog, _enemyPrefab))
+            if (!_spawnManager.InitializeForRunner(_runner, _playerClassCatalog, _enemyPrefabs))
             {
                 Debug.LogError("[FusionSessionLauncher] Failed to initialize NetworkSpawnManager for the current runner.");
                 await ShutdownAndDestroyRunnerAsync();

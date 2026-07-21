@@ -30,7 +30,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
     }
 
     private PlayerClassCatalog _playerClassCatalog;
-    private NetworkPrefabRef _enemyPrefab;
+    private NetworkPrefabRef[] _enemyPrefabs;
 
     private readonly HashSet<PlayerRef> _admittedPlayers = new();
     private readonly Dictionary<PlayerRef, NetworkObject> _spawnedPlayers = new();
@@ -77,7 +77,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
     public bool InitializeForRunner(
         NetworkRunner runner,
         PlayerClassCatalog catalog,
-        NetworkPrefabRef enemyPrefab)
+        NetworkPrefabRef[] enemyPrefab)
     {
         if (runner == null)
         {
@@ -100,7 +100,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
         _runner = runner;
         _playerClassCatalog = catalog;
-        _enemyPrefab = enemyPrefab;
+        _enemyPrefabs = enemyPrefab;
 
         _admittedPlayers.Clear();
         _spawnedPlayers.Clear();
@@ -624,7 +624,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
     private void SpawnEnemy(NetworkRunner runner, SpawnGroupType groupType)
     {
-        if (_enemyPrefab == null)
+        if (_enemyPrefabs == null || _enemyPrefabs.Length <= 0)
         {
             Debug.LogError("Cannot spawn enemy: Enemy prefab reference is missing.");
             return;
@@ -635,7 +635,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             out Vector3 position,
             out Quaternion rotation);
         NetworkObject enemyObject = runner.Spawn(
-            _enemyPrefab,
+            _enemyPrefabs[UnityEngine.Random.Range(0, _enemyPrefabs.Length)],
             position,
             rotation);
 

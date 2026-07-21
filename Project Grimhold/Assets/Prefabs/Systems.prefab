@@ -79,8 +79,9 @@ MonoBehaviour:
   _sessionName: Project Grimhold
   _maxPlayers: 4
   _playerClassCatalog: {fileID: 11400000, guid: 7d62cc447157aaa4c97bc7cdb8855836, type: 2}
-  _enemyPrefab:
-    RawGuidValue: be065b8028b5c3446a4e981ab29a28a1
+  _enemyPrefabs:
+  - RawGuidValue: 5deca87613df0fa409d98702aec643d4
+  - RawGuidValue: 6f7ab2fe6d6193a4ea17a843ff58f94b
   _matchControllerPrefab:
     RawGuidValue: b91f8c7e96a4d784a92c3bd1a88dfec8
 --- !u!1 &4428764685288075167
