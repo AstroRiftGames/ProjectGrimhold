@@ -21,6 +21,36 @@ namespace Tests.EditMode.Player
         }
 
         [Test]
+        public void TrySelect_SelectsWithoutExecutingInteraction()
+        {
+            var interactorId = new EntityId(1);
+            var targetId = new EntityId(2);
+            var interactable = new MockInteractable(targetId, true, true);
+            _mockDatabase[targetId] = interactable;
+
+            var candidates = new List<InteractionTarget>
+            {
+                new InteractionTarget(targetId, new Vector2(0.5f, 0f), 0.5f)
+            };
+
+            bool selected = InteractionResolver.TrySelect(
+                interactorId,
+                100,
+                2f,
+                candidates,
+                Lookup,
+                out InteractionTarget selectedTarget,
+                out InteractionRequest selectedRequest,
+                out IInteractable selectedInteractable);
+
+            Assert.IsTrue(selected);
+            Assert.AreEqual(targetId, selectedTarget.TargetId);
+            Assert.AreEqual(targetId, selectedRequest.TargetId);
+            Assert.AreSame(interactable, selectedInteractable);
+            Assert.IsFalse(interactable.WasInteracted);
+        }
+
+        [Test]
         public void TryResolve_EmptyCandidatesReturnsFalse()
         {
             var interactorId = new EntityId(1);

@@ -71,7 +71,19 @@ Una clase puramente lógica y estática que contiene las reglas de selección de
 
 ---
 
-## 3. Integración con Loot (Pickups)
+## 3. Presentación local y resultados confirmados
+
+`InteractionResolver.TrySelect` contiene la política compartida de selección sin ejecutar `Interact`. `LocalInteractionCandidateSource` la ejecuta durante `Render` únicamente para el jugador con Input Authority y expone un candidato local de solo lectura. El prompt es predictivo: no garantiza aceptación y no sincroniza textos ni recursos visuales.
+
+Cada pulsación procesada por State Authority incrementa `InteractionSequence`, incluso cuando el control está deshabilitado, el interactor no está disponible o no existe un target válido. El resultado conserva target, tick, éxito, consumo y `InteractionFailureReason`.
+
+State Authority envía cada resultado mediante un RPC fiable dirigido al Input Authority. El handler sólo encola el payload; `PlayerInteractionNetworkController.Render` publica `InteractionResolved`. El presenter recuerda la última secuencia consumida, no reproduce el estado inicial y reinicia su deduplicador con el objeto del jugador de una sesión nueva.
+
+`LocalPlayerHudBinder` activa el HUD del prefab sólo cuando `HasInputAuthority`. Proxies, animaciones y vistas no ejecutan interacción ni modifican estado autoritativo.
+
+---
+
+## 4. Integración con Loot (Pickups)
 
 El sistema de pickups de loot (`NetworkLootPickup`) implementa `IInteractable` de la segregation de la siguiente manera:
 1. Al recibir `CanInteract`, comprueba que el pickup no esté marcado como consumido.

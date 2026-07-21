@@ -4,7 +4,10 @@ public enum LootReceiveFailureReason
     InvalidLootId,
     InvalidAmount,
     ReceiverUnavailable,
-    CapacityReached
+    MissingStateAuthority,
+    UnknownDefinition,
+    Overflow,
+    InvalidNetworkRepresentation
 }
 
 public readonly struct LootReceiveResult

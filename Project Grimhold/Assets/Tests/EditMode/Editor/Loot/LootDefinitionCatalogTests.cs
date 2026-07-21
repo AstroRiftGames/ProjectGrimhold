@@ -220,5 +220,48 @@ namespace Tests.EditMode.Loot
             Assert.That(found2, Is.True);
             Assert.That(result2, Is.SameAs(d2));
         }
+
+        [Test]
+        public void DeterministicIndices_AreAssignedByOrdinalIdOrder()
+        {
+            LootDefinition gem = CreateValidDefinition("gem");
+            LootDefinition coin = CreateValidDefinition("coin");
+            LootDefinition artifact = CreateValidDefinition("artifact");
+            SetCatalogDefinitions(gem, coin, artifact);
+
+            Assert.That(_catalog.DefinitionCount, Is.EqualTo(3));
+            Assert.That(_catalog.TryGetIndex(artifact.LootId, out int artifactIndex), Is.True);
+            Assert.That(_catalog.TryGetIndex(coin.LootId, out int coinIndex), Is.True);
+            Assert.That(_catalog.TryGetIndex(gem.LootId, out int gemIndex), Is.True);
+            Assert.That(artifactIndex, Is.EqualTo(0));
+            Assert.That(coinIndex, Is.EqualTo(1));
+            Assert.That(gemIndex, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void TryGetByIndex_UsesTheSameDeterministicMapping()
+        {
+            LootDefinition gem = CreateValidDefinition("gem");
+            LootDefinition coin = CreateValidDefinition("coin");
+            SetCatalogDefinitions(gem, coin);
+
+            Assert.That(_catalog.TryGetByIndex(0, out LootDefinition first), Is.True);
+            Assert.That(_catalog.TryGetByIndex(1, out LootDefinition second), Is.True);
+            Assert.That(first, Is.SameAs(coin));
+            Assert.That(second, Is.SameAs(gem));
+            Assert.That(_catalog.TryGetByIndex(-1, out _), Is.False);
+            Assert.That(_catalog.TryGetByIndex(2, out _), Is.False);
+        }
+
+        [Test]
+        public void TryGetIndex_UnknownDefinitionReturnsFalse()
+        {
+            LootDefinition coin = CreateValidDefinition("coin");
+            SetCatalogDefinitions(coin);
+
+            bool found = _catalog.TryGetIndex(new LootId("unknown"), out _);
+
+            Assert.That(found, Is.False);
+        }
     }
 }

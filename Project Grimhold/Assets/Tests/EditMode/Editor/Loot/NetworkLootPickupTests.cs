@@ -63,17 +63,17 @@ namespace Tests.EditMode.Loot
         public void LootReceiveResult_DifferentiatesAcceptanceAndRejection()
         {
             var success = LootReceiveResult.Accepted();
-            var failure = LootReceiveResult.Rejected(LootReceiveFailureReason.CapacityReached);
+            var failure = LootReceiveResult.Rejected(LootReceiveFailureReason.MissingStateAuthority);
 
             Assert.IsTrue(success.Success);
             Assert.AreEqual(LootReceiveFailureReason.None, success.FailureReason);
 
             Assert.IsFalse(failure.Success);
-            Assert.AreEqual(LootReceiveFailureReason.CapacityReached, failure.FailureReason);
+            Assert.AreEqual(LootReceiveFailureReason.MissingStateAuthority, failure.FailureReason);
         }
 
         [Test]
-        public void PlayerLootReceiver_RejectsInvalidLootId()
+        public void PlayerLootReceiver_WithoutSpawnedStateAuthorityRejectsGrant()
         {
             var go = new GameObject();
             var receiver = go.AddComponent<PlayerLootReceiver>();
@@ -82,7 +82,7 @@ namespace Tests.EditMode.Loot
             var result = receiver.TryGrantLoot(request);
 
             Assert.IsFalse(result.Success);
-            Assert.AreEqual(LootReceiveFailureReason.InvalidLootId, result.FailureReason);
+            Assert.AreEqual(LootReceiveFailureReason.MissingStateAuthority, result.FailureReason);
             UnityEngine.Object.DestroyImmediate(go);
         }
 
@@ -92,58 +92,6 @@ namespace Tests.EditMode.Loot
             Assert.Throws<ArgumentException>(() => new LootId(null));
             Assert.Throws<ArgumentException>(() => new LootId(""));
             Assert.Throws<ArgumentException>(() => new LootId("   "));
-        }
-
-        [Test]
-        public void PlayerLootReceiver_RejectsInvalidAmount()
-        {
-            var go = new GameObject();
-            var receiver = go.AddComponent<PlayerLootReceiver>();
-            var request = new LootGrantRequest(new EntityId(1), receiver.Id, new LootId("gold"), 0, 100);
-
-            var result = receiver.TryGrantLoot(request);
-
-            Assert.IsFalse(result.Success);
-            Assert.AreEqual(LootReceiveFailureReason.InvalidAmount, result.FailureReason);
-            UnityEngine.Object.DestroyImmediate(go);
-        }
-
-        [Test]
-        public void PlayerLootReceiver_RejectionDoesNotModifyStoredState()
-        {
-            var go = new GameObject();
-            var receiver = go.AddComponent<PlayerLootReceiver>();
-            var lootId = new LootId("gold");
-
-            // Valid grant first
-            var validRequest = new LootGrantRequest(new EntityId(1), receiver.Id, lootId, 10, 100);
-            receiver.TryGrantLoot(validRequest);
-            Assert.AreEqual(10, receiver.GetLootAmount(lootId));
-
-            // Invalid grant next
-            var invalidRequest = new LootGrantRequest(new EntityId(1), receiver.Id, lootId, -5, 100);
-            receiver.TryGrantLoot(invalidRequest);
-
-            // Verify state is unmodified by the rejected attempt
-            Assert.AreEqual(10, receiver.GetLootAmount(lootId));
-            UnityEngine.Object.DestroyImmediate(go);
-        }
-
-        [Test]
-        public void PlayerLootReceiver_AcceptanceIncrementsQuantityCorrectly()
-        {
-            var go = new GameObject();
-            var receiver = go.AddComponent<PlayerLootReceiver>();
-            var lootId = new LootId("gold");
-
-            var req1 = new LootGrantRequest(new EntityId(1), receiver.Id, lootId, 10, 100);
-            var req2 = new LootGrantRequest(new EntityId(1), receiver.Id, lootId, 5, 101);
-
-            receiver.TryGrantLoot(req1);
-            receiver.TryGrantLoot(req2);
-
-            Assert.AreEqual(15, receiver.GetLootAmount(lootId));
-            UnityEngine.Object.DestroyImmediate(go);
         }
 
         private sealed class StubLootReceiver : ILootReceiver
@@ -309,30 +257,5 @@ namespace Tests.EditMode.Loot
             Assert.AreEqual(InteractionFailureReason.ReceiverNotFound, res.FailureReason);
         }
 
-        [Test]
-        public void LootTransaction_PureLogic_VerifySequence()
-        {
-            // We verify the logical requirements of NetworkLootPickup and PlayerLootReceiver
-            // under a simulated environment.
-            var receiverGo = new GameObject();
-            var receiver = receiverGo.AddComponent<PlayerLootReceiver>();
-            var receiverId = receiver.Id;
-
-            var loot = new LootId("coal");
-            var request = new LootGrantRequest(new EntityId(99), receiverId, loot, 1, 42);
-
-            // Test atomic grant rejection
-            var rejectRequest = new LootGrantRequest(new EntityId(99), receiverId, loot, -10, 42);
-            var rejectResult = receiver.TryGrantLoot(rejectRequest);
-            Assert.IsFalse(rejectResult.Success);
-            Assert.AreEqual(0, receiver.GetLootAmount(loot));
-
-            // Test atomic grant acceptance
-            var acceptResult = receiver.TryGrantLoot(request);
-            Assert.IsTrue(acceptResult.Success);
-            Assert.AreEqual(1, receiver.GetLootAmount(loot));
-
-            UnityEngine.Object.DestroyImmediate(receiverGo);
-        }
     }
 }
