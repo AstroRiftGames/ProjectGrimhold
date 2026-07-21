@@ -1,94 +1,410 @@
 using Fusion;
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using Spawning;
 
+/// <summary>
+/// Server-authoritative manager responsible for admitting players and spawning characters/entities.
+/// Lives on the persistent runner GameObject and maintains its lifecycle strictly aligned with the associated runner.
+/// </summary>
+[DisallowMultipleComponent]
 public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 {
-    public enum SpawnGroupType
+    private enum SceneLoadProcessingState
     {
-        Players,
-        Enemies,
-        Loot,
-        NPCs,
-        Bosses,
-        Misc
+        None,
+        Pending,
+        Processing,
+        Completed,
+        Failed
     }
 
-    [Serializable]
-    public class SpawnGroup
+    public enum SceneSpawnConfigurationStatus
     {
-        public SpawnGroupType Group;
-        public Transform[] SpawnPoints;
-        public NetworkPrefabRef[] Prefabs;
-        public int amount;
+        None,
+        SpawnPointsNotRequired,
+        SpawnPointsReady,
+        Invalid
     }
 
-    [Header("Player")]
-    [SerializeField]
     private PlayerClassCatalog _playerClassCatalog;
+    private NetworkPrefabRef _enemyPrefab;
 
-    [Header("Spawn Groups")]
-    [SerializeField]
-    private SpawnGroup[] _spawnGroups;
-
+    private readonly HashSet<PlayerRef> _admittedPlayers = new();
     private readonly Dictionary<PlayerRef, NetworkObject> _spawnedPlayers = new();
-    private readonly Dictionary<PlayerRef, NetworkObject> _spawnedEnemies = new();
+    private readonly List<NetworkObject> _spawnedEnemies = new();
 
     private readonly Dictionary<SpawnGroupType, Transform[]> _spawnPointLookup = new();
 
     private NetworkRunner _runner;
+    private NetworkMatchController _matchController;
+    private NetworkSpawnSceneConfiguration _sceneSpawnPointConfiguration;
+
+    private int _currentSceneLoadGeneration = 0;
+    private int _lastCompletedSceneLoadGeneration = -1;
+    private SceneLoadProcessingState _sceneLoadState = SceneLoadProcessingState.None;
+    private SceneSpawnConfigurationStatus _sceneSpawnStatus = SceneSpawnConfigurationStatus.None;
+    private bool _spawnsBlocked = true;
+
+    /// <summary>
+    /// Exposes the linked coordinator.
+    /// </summary>
+    public NetworkMatchController MatchController => _matchController;
 
     private void Awake()
     {
-        if (_playerClassCatalog == null)
-        {
-            Debug.LogError("PlayerClassCatalog reference is missing on NetworkSpawnManager!", this);
-        }
-        else if (!_playerClassCatalog.TryValidate(out string error))
-        {
-            Debug.LogError($"PlayerClassCatalog validation failed: {error}", this);
-            _playerClassCatalog = null;
-        }
-
-        _spawnPointLookup.Clear();
-
-        foreach (SpawnGroup group in _spawnGroups)
-        {
-            if (!_spawnPointLookup.ContainsKey(group.Group))
-            {
-                _spawnPointLookup.Add(group.Group, group.SpawnPoints);
-            }
-        }
+        // No global static instance registration or DontDestroyOnLoad here.
+        // The Launcher adds this component to the persistent runner GameObject, which handles DontDestroyOnLoad.
     }
 
-    private void Start()
+    private void OnDestroy()
     {
-        _runner = FindAnyObjectByType<NetworkRunner>();
+        _admittedPlayers.Clear();
+        _spawnedPlayers.Clear();
+        _spawnedEnemies.Clear();
+        _spawnPointLookup.Clear();
+        _matchController = null;
+        _runner = null;
+        _sceneSpawnPointConfiguration = null;
+    }
 
-        _runner.AddCallbacks(this);
+    /// <summary>
+    /// Explicitly binds the manager with a single active NetworkRunner instance.
+    /// This must be called before starting the session and registering callbacks.
+    /// </summary>
+    public bool InitializeForRunner(
+        NetworkRunner runner,
+        PlayerClassCatalog catalog,
+        NetworkPrefabRef enemyPrefab)
+    {
+        if (runner == null)
+        {
+            Debug.LogError("[NetworkSpawnManager] InitializeForRunner: runner is null.");
+            return false;
+        }
+
+        // Return true if already initialized for the same active runner (idempotent)
+        if (_runner == runner)
+        {
+            return true;
+        }
+
+        // Reject if trying to associate with a different runner when previous is active
+        if (_runner != null && _runner.IsRunning)
+        {
+            Debug.LogError("[NetworkSpawnManager] InitializeForRunner: Manager is already associated with another active runner.");
+            return false;
+        }
+
+        _runner = runner;
+        _playerClassCatalog = catalog;
+        _enemyPrefab = enemyPrefab;
+
+        _admittedPlayers.Clear();
+        _spawnedPlayers.Clear();
+        _spawnedEnemies.Clear();
+        _spawnPointLookup.Clear();
+        _matchController = null;
+        _sceneSpawnPointConfiguration = null;
+
+        _currentSceneLoadGeneration = 0;
+        _lastCompletedSceneLoadGeneration = -1;
+        _sceneLoadState = SceneLoadProcessingState.None;
+        _sceneSpawnStatus = SceneSpawnConfigurationStatus.None;
+        _spawnsBlocked = true;
+
+        Debug.Log($"[NetworkSpawnManager] Initialized for runner: {runner.name}");
+        return true;
+    }
+
+    /// <summary>
+    /// Explicitly binds the match coordinator to this manager.
+    /// </summary>
+    public bool BindMatchController(NetworkMatchController coordinator)
+    {
+        if (_runner == null)
+        {
+            Debug.LogError("[NetworkSpawnManager] BindMatchController: Manager has not been initialized for a runner.");
+            return false;
+        }
+
+        if (coordinator == null)
+        {
+            Debug.LogError("[NetworkSpawnManager] BindMatchController: Match coordinator is null.");
+            return false;
+        }
+
+        if (coordinator.Runner != _runner)
+        {
+            Debug.LogError("[NetworkSpawnManager] BindMatchController: Coordinator belongs to a different runner.");
+            return false;
+        }
+
+        if (_matchController != null && _matchController != coordinator)
+        {
+            Debug.LogError("[NetworkSpawnManager] BindMatchController: Another coordinator is already bound to this manager.");
+            return false;
+        }
+
+        _matchController = coordinator;
+        Debug.Log($"[NetworkSpawnManager] Coordinator bound successfully to runner {_runner.name}");
+        return true;
+    }
+
+    /// <summary>
+    /// Configures spawn points and groups using the scene's spatial configuration.
+    /// </summary>
+    public void ConfigureForScene(NetworkSpawnSceneConfiguration config)
+    {
+        if (config == null) return;
+
+        if (!config.Validate(out string error))
+        {
+            Debug.LogError($"[NetworkSpawnManager] Scene configuration validation failed: {error}");
+            return;
+        }
+
+        // Validate that all spawn points belong strictly to the config's scene
+        if (config.SpawnGroups != null)
+        {
+            foreach (var definition in config.SpawnGroups)
+            {
+                if (definition != null && definition.SpawnPoints != null)
+                {
+                    foreach (var sp in definition.SpawnPoints)
+                    {
+                        if (sp != null && sp.gameObject.scene != config.gameObject.scene)
+                        {
+                            Debug.LogError($"[NetworkSpawnManager] Spawn point '{sp.name}' does not belong to scene '{config.gameObject.scene.name}'. Spawning aborted.");
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        _sceneSpawnPointConfiguration = config;
+        _spawnPointLookup.Clear();
+
+        if (config.SpawnGroups != null)
+        {
+            foreach (var definition in config.SpawnGroups)
+            {
+                if (definition != null && definition.SpawnPoints != null)
+                {
+                    if (!_spawnPointLookup.ContainsKey(definition.Group))
+                    {
+                        _spawnPointLookup.Add(definition.Group, definition.SpawnPoints);
+                    }
+                }
+            }
+        }
+        Debug.Log("[NetworkSpawnManager] Scene configuration applied successfully.");
+    }
+
+    public override void OnSceneLoadStart(NetworkRunner runner)
+    {
+        if (runner != _runner)
+            return;
+
+        // Invalidate previous scene configs and transforms immediately
+        _spawnPointLookup.Clear();
+        _sceneSpawnPointConfiguration = null;
+
+        // Increment scene load generation to build a unique load identity
+        _currentSceneLoadGeneration++;
+        _sceneLoadState = SceneLoadProcessingState.Pending;
+        _sceneSpawnStatus = SceneSpawnConfigurationStatus.None;
+        _spawnsBlocked = true;
+
+        Debug.Log($"[NetworkSpawnManager] OnSceneLoadStart: Starting load generation {_currentSceneLoadGeneration} (State: {_sceneLoadState}). Blocked spawning and cleared spatial config.");
     }
 
     public override void OnSceneLoadDone(NetworkRunner runner)
     {
+        if (runner != _runner)
+            return;
+
         if (!runner.IsServer)
             return;
 
-        foreach (PlayerRef player in runner.ActivePlayers)
+        int thisLoadIdentity = _currentSceneLoadGeneration;
+
+        // Reject if not pending or already completed
+        if (_sceneLoadState != SceneLoadProcessingState.Pending)
         {
-            SpawnPlayer(runner, player);
+            Debug.LogWarning($"[NetworkSpawnManager] OnSceneLoadDone: Load state is {_sceneLoadState} (expected Pending). Skipping duplicate spawn processing.");
+            return;
         }
 
-        for(int n = 0; n < _spawnGroups.Length; n++)
+        if (thisLoadIdentity == _lastCompletedSceneLoadGeneration)
         {
-            SpawnGroup group = _spawnGroups[n];
-            if (group.Group == SpawnGroupType.Players)
-                continue;
-            for (int i = 0; i < group.amount; i++)
+            Debug.LogWarning($"[NetworkSpawnManager] OnSceneLoadDone: Generation {thisLoadIdentity} is already marked completed. Skipping.");
+            return;
+        }
+
+        // Change state to Processing immediately to prevent concurrent callback execution
+        _sceneLoadState = SceneLoadProcessingState.Processing;
+
+        // Ensure runner has a valid SceneManager
+        if (runner.SceneManager == null)
+        {
+            Debug.LogError("[NetworkSpawnManager] OnSceneLoadDone: runner.SceneManager is null. Spawning aborted.");
+            FailSceneLoadPipeline();
+            return;
+        }
+
+        // Resolve runnerScene
+        Scene runnerScene = runner.SceneManager.MainRunnerScene;
+        if (!runnerScene.IsValid() || !runnerScene.isLoaded || !runner.SceneManager.IsRunnerScene(runnerScene))
+        {
+            Debug.LogError($"[NetworkSpawnManager] OnSceneLoadDone: MainRunnerScene is invalid, not loaded, or not a runner scene. Spawning aborted.");
+            FailSceneLoadPipeline();
+            return;
+        }
+
+        // Find configurations strictly within root objects of the runnerScene and their children
+        NetworkSpawnSceneConfiguration sceneConfig = null;
+        int configCount = 0;
+        try
+        {
+            GameObject[] rootObjects = runnerScene.GetRootGameObjects();
+            foreach (var go in rootObjects)
             {
-                SpawnEnemy(runner, group.Group);
+                if (go == null) continue;
+                var configsInRoot = go.GetComponentsInChildren<NetworkSpawnSceneConfiguration>(true);
+                foreach (var c in configsInRoot)
+                {
+                    if (c != null)
+                    {
+                        sceneConfig = c;
+                        configCount++;
+                    }
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[NetworkSpawnManager] Exception resolving scene configurations: {ex.Message}. Spawning aborted.");
+            FailSceneLoadPipeline();
+            return;
+        }
+
+        // Apply explicit scene spawning policy
+        if (configCount == 0)
+        {
+            // Cero configuraciones: no asumimos éxito. Tratamos como inválida/falla (política no declarada).
+            Debug.LogError($"[NetworkSpawnManager] Scene '{runnerScene.name}' does not contain any NetworkSpawnSceneConfiguration. Spawning aborted.");
+            FailSceneLoadPipeline();
+            return;
+        }
+        else if (configCount > 1)
+        {
+            Debug.LogError($"[NetworkSpawnManager] Multiple NetworkSpawnSceneConfiguration components found in scene '{runnerScene.name}'! Spawning aborted.");
+            FailSceneLoadPipeline();
+            return;
+        }
+
+        // Validate and apply configuration
+        if (sceneConfig.gameObject.scene != runnerScene)
+        {
+            Debug.LogError($"[NetworkSpawnManager] Config '{sceneConfig.name}' belongs to a different scene. Spawning aborted.");
+            FailSceneLoadPipeline();
+            return;
+        }
+
+        if (!sceneConfig.Validate(out string validationError))
+        {
+            Debug.LogError($"[NetworkSpawnManager] Scene configuration validation failed: {validationError}. Spawning aborted.");
+            FailSceneLoadPipeline();
+            return;
+        }
+
+        // Determine spawn configuration status
+        if (sceneConfig.SpawnPointPolicy == SceneSpawnPointPolicy.NotRequired)
+        {
+            _sceneSpawnStatus = SceneSpawnConfigurationStatus.SpawnPointsNotRequired;
+            _spawnPointLookup.Clear();
+            _sceneSpawnPointConfiguration = null;
+            Debug.Log($"[NetworkSpawnManager] Scene '{runnerScene.name}' loaded. Scene does not require configured spawn points.");
+        }
+        else
+        {
+            _sceneSpawnStatus = SceneSpawnConfigurationStatus.SpawnPointsReady;
+            ConfigureForScene(sceneConfig);
+        }
+
+        // Start processing spawns
+        try
+        {
+            // Only process players/enemies if the scene requires spawn points
+            if (_sceneSpawnStatus == SceneSpawnConfigurationStatus.SpawnPointsReady)
+            {
+                // Spawn players
+                foreach (PlayerRef player in runner.ActivePlayers)
+                {
+                    if (_admittedPlayers.Contains(player))
+                    {
+                        SpawnPlayer(runner, player);
+                    }
+                }
+
+                // Spawn initial enemies/entities
+                if (_sceneSpawnPointConfiguration != null && _sceneSpawnPointConfiguration.SpawnGroups != null)
+                {
+                    foreach (var group in _sceneSpawnPointConfiguration.SpawnGroups)
+                    {
+                        if (group == null || group.Group == SpawnGroupType.Players)
+                            continue;
+
+                        for (int i = 0; i < group.Amount; i++)
+                        {
+                            SpawnEnemy(runner, group.Group);
+                        }
+                    }
+                }
+            }
+
+            // Mark completed successfully
+            _lastCompletedSceneLoadGeneration = thisLoadIdentity;
+            _sceneLoadState = SceneLoadProcessingState.Completed;
+            _spawnsBlocked = false;
+            Debug.Log($"[NetworkSpawnManager] OnSceneLoadDone: Load generation {thisLoadIdentity} completed successfully (Status: {_sceneSpawnStatus}). Spawns unblocked.");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[NetworkSpawnManager] Exception during spawn processing: {ex.Message}");
+            FailSceneLoadPipeline();
+        }
+    }
+
+    private void FailSceneLoadPipeline()
+    {
+        _sceneSpawnStatus = SceneSpawnConfigurationStatus.Invalid;
+        _sceneLoadState = SceneLoadProcessingState.Failed;
+        _spawnsBlocked = true;
+        _spawnPointLookup.Clear();
+        _sceneSpawnPointConfiguration = null;
+    }
+
+    public override void OnConnectRequest(
+        NetworkRunner runner,
+        NetworkRunnerCallbackArgs.ConnectRequest request,
+        byte[] token)
+    {
+        if (!runner.IsServer || runner != _runner)
+            return;
+
+        // Accept connection requests ONLY during the lobby phase (WaitingForPlayers)
+        bool allowJoin = _matchController != null &&
+                         _matchController.Phase == NetworkMatchController.MatchPhase.WaitingForPlayers;
+
+        if (!allowJoin)
+        {
+            Debug.LogWarning($"[NetworkSpawnManager] Refusing connection request from {request.RemoteAddress} because the match has already started (Phase: {_matchController?.Phase}).");
+            request.Refuse();
         }
     }
 
@@ -96,13 +412,105 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
     {
         Debug.Log($"PlayerJoined: {player}");
 
-        if (!runner.IsServer)
+        if (!runner.IsServer || runner != _runner)
         {
-            Debug.Log("Not server, skipping spawn");
             return;
         }
 
-        SpawnPlayer(runner, player);
+        // Reject remote connections if coordinator is not ready
+        if (_matchController == null)
+        {
+            if (player == runner.LocalPlayer)
+            {
+                Debug.Log("[NetworkSpawnManager] OnPlayerJoined: Coordinator not ready, deferring local Host admission.");
+                return;
+            }
+            else
+            {
+                Debug.LogWarning("[NetworkSpawnManager] OnPlayerJoined: Coordinator not ready. Disconnecting remote player.");
+                runner.Disconnect(player);
+                return;
+            }
+        }
+
+        // Try to admit player
+        if (TryAdmitPlayer(runner, player))
+        {
+            SpawnPlayer(runner, player);
+        }
+        else
+        {
+            // Reject late joins immediately
+            if (player != runner.LocalPlayer)
+            {
+                Debug.LogWarning($"[NetworkSpawnManager] Player {player} joined late during phase {_matchController.Phase}. Disconnecting client.");
+                runner.Disconnect(player);
+            }
+        }
+    }
+
+    public bool TryAdmitPlayer(NetworkRunner runner, PlayerRef player)
+    {
+        if (!runner.IsServer || runner != _runner)
+            return false;
+
+        if (player.IsNone)
+            return false;
+
+        if (_matchController == null)
+            return false;
+
+        if (_matchController.Phase != NetworkMatchController.MatchPhase.WaitingForPlayers)
+            return false;
+
+        if (_admittedPlayers.Contains(player))
+            return true;
+
+        _admittedPlayers.Add(player);
+        Debug.Log($"[NetworkSpawnManager] Player {player} registered as an admitted participant.");
+        return true;
+    }
+
+    public HostBootstrapResult TryBootstrapHost(
+        NetworkRunner runner,
+        NetworkMatchController matchController)
+    {
+        if (runner == null || _runner != runner)
+            return HostBootstrapResult.InvalidRunner;
+
+        if (!runner.IsServer)
+            return HostBootstrapResult.NoAuthority;
+
+        if (runner.LocalPlayer.IsNone)
+            return HostBootstrapResult.InvalidRunner;
+
+        if (matchController == null || matchController.Phase != NetworkMatchController.MatchPhase.WaitingForPlayers)
+            return HostBootstrapResult.InvalidCoordinator;
+
+        // Try to admit the Host player idempotently
+        if (!TryAdmitPlayer(runner, runner.LocalPlayer))
+            return HostBootstrapResult.AdmissionFailed;
+
+        // If Host character is already spawned, bootstrap is complete
+        if (_spawnedPlayers.ContainsKey(runner.LocalPlayer))
+            return HostBootstrapResult.BootstrapCompleted;
+
+        // Verify if we have a valid completed loading state and spatial configuration
+        if (_spawnsBlocked || _sceneLoadState != SceneLoadProcessingState.Completed || _sceneSpawnStatus != SceneSpawnConfigurationStatus.SpawnPointsReady)
+        {
+            Debug.Log("[NetworkSpawnManager] Host admitted, but player spawn is pending scene load.");
+            return HostBootstrapResult.HostAdmittedSpawnPending;
+        }
+
+        // Spawn points are configured, spawn immediately
+        SpawnPlayer(runner, runner.LocalPlayer);
+
+        if (_spawnedPlayers.ContainsKey(runner.LocalPlayer))
+        {
+            return HostBootstrapResult.BootstrapCompleted;
+        }
+
+        return HostBootstrapResult.HostAdmittedSpawnPending;
     }
 
     private bool TryGetJoinData(
@@ -135,17 +543,51 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         return true;
     }
 
-    private void SpawnPlayer(NetworkRunner runner, PlayerRef player)
+    private bool CanSpawnPlayer(NetworkRunner runner, PlayerRef player)
     {
+        if (runner != _runner)
+            return false;
+
+        if (!runner.IsServer)
+            return false;
+
+        if (player.IsNone)
+            return false;
+
+        // Allow spawning during Processing (only if it's the internal pipeline doing it)
+        // or when Completed with a valid spatial configuration
+        bool loadStateValid = _sceneLoadState == SceneLoadProcessingState.Processing || 
+                              (_sceneLoadState == SceneLoadProcessingState.Completed && _sceneSpawnStatus == SceneSpawnConfigurationStatus.SpawnPointsReady);
+        if (!loadStateValid)
+            return false;
+
+        if (_matchController == null || _matchController.Runner != runner)
+            return false;
+
+        if (!_admittedPlayers.Contains(player))
+            return false;
+
         if (_spawnedPlayers.ContainsKey(player))
-        {
-            Debug.Log($"Player {player} already spawned.");
-            return;
-        }
+            return false;
+
+        if (runner.GetPlayerObject(player) != null)
+            return false;
 
         if (_playerClassCatalog == null)
+            return false;
+
+        bool phaseAllowsSpawning = _matchController.Phase == NetworkMatchController.MatchPhase.WaitingForPlayers ||
+                                   _matchController.Phase == NetworkMatchController.MatchPhase.Starting ||
+                                   _matchController.Phase == NetworkMatchController.MatchPhase.InProgress;
+
+        return phaseAllowsSpawning;
+    }
+
+    private void SpawnPlayer(NetworkRunner runner, PlayerRef player)
+    {
+        if (!CanSpawnPlayer(runner, player))
         {
-            Debug.LogError($"Cannot spawn player {player}: PlayerClassCatalog is null or invalid.");
+            Debug.LogWarning($"[NetworkSpawnManager] Rejecting spawn for player {player}: validation failed.");
             return;
         }
 
@@ -157,7 +599,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
         if (!_playerClassCatalog.TryGetPrefab(joinData.ClassId, out NetworkPrefabRef prefab))
         {
-            Debug.LogError($"Rejecting spawn for player {player}: Class {joinData.ClassId} not registered or has invalid prefab.");
+            Debug.LogError($"Rejecting spawn for player {player}: Class {joinData.ClassId} not registered.");
             return;
         }
 
@@ -182,7 +624,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
     private void SpawnEnemy(NetworkRunner runner, SpawnGroupType groupType)
     {
-        if (_spawnGroups[2] == null || _spawnGroups[2].Prefabs == null)
+        if (_enemyPrefab == null)
         {
             Debug.LogError("Cannot spawn enemy: Enemy prefab reference is missing.");
             return;
@@ -193,16 +635,20 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             out Vector3 position,
             out Quaternion rotation);
         NetworkObject enemyObject = runner.Spawn(
-            _spawnGroups[2].Prefabs[UnityEngine.Random.Range(0, _spawnGroups[2].Prefabs.Length)],
+            _enemyPrefab,
             position,
             rotation);
+
+        _spawnedEnemies.Add(enemyObject);
         Debug.Log($"Spawned enemy of group {groupType} at {position}.");
     }
 
     public override void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-        if (!runner.IsServer)
+        if (!runner.IsServer || runner != _runner)
             return;
+
+        _admittedPlayers.Remove(player);
 
         if (!_spawnedPlayers.Remove(player, out NetworkObject playerObject))
             return;
@@ -213,6 +659,63 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         }
 
         Debug.Log($"Despawned player {player}.");
+    }
+
+    public override void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
+    {
+        if (runner == _runner)
+        {
+            _admittedPlayers.Clear();
+            _spawnedPlayers.Clear();
+            _spawnedEnemies.Clear();
+            _spawnPointLookup.Clear();
+            _matchController = null;
+            _runner = null;
+            _sceneSpawnPointConfiguration = null;
+            _currentSceneLoadGeneration = 0;
+            _lastCompletedSceneLoadGeneration = -1;
+            _sceneLoadState = SceneLoadProcessingState.None;
+            _sceneSpawnStatus = SceneSpawnConfigurationStatus.None;
+            _spawnsBlocked = true;
+            Debug.Log("[NetworkSpawnManager] Shutdown complete. Cleared all states and references.");
+        }
+    }
+
+    private bool CanUseCurrentSceneSpawnPoints(NetworkRunner runner)
+    {
+        if (runner != _runner)
+            return false;
+
+        if (_spawnsBlocked)
+            return false;
+
+        if (_sceneLoadState != SceneLoadProcessingState.Completed)
+            return false;
+
+        if (_sceneSpawnStatus != SceneSpawnConfigurationStatus.SpawnPointsReady)
+            return false;
+
+        if (_matchController == null || _matchController.Runner != runner)
+            return false;
+
+        if (_sceneSpawnPointConfiguration == null)
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Validates spawning that does not consume the current scene spawn-point configuration.
+    /// </summary>
+    private bool CanSpawnAtExplicitTransform(NetworkRunner runner)
+    {
+        if (runner == null || runner != _runner)
+            return false;
+
+        if (!runner.IsServer)
+            return false;
+
+        return true;
     }
 
     public NetworkObject Spawn(
@@ -239,6 +742,12 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             return null;
         }
 
+        if (!CanUseCurrentSceneSpawnPoints(_runner))
+        {
+            Debug.LogError("[NetworkSpawnManager] Spawn failed: Scene spawn points are unavailable or blocked.");
+            return null;
+        }
+
         GetSpawnTransform(
             group,
             spawnSeed,
@@ -256,15 +765,9 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         Vector3 position,
         Quaternion rotation)
     {
-        if (_runner == null)
+        if (!CanSpawnAtExplicitTransform(_runner))
         {
-            Debug.LogError("NetworkRunner not initialized.");
-            return null;
-        }
-
-        if (!_runner.IsServer)
-        {
-            Debug.LogWarning("Only the server can spawn NetworkObjects.");
+            Debug.LogError("[NetworkSpawnManager] Spawn failed: Runner is not initialized or lacks authority.");
             return null;
         }
 
@@ -301,4 +804,14 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         position = spawnPoint.position;
         rotation = spawnPoint.rotation;
     }
+}
+
+public enum HostBootstrapResult
+{
+    BootstrapCompleted,
+    HostAdmittedSpawnPending,
+    AdmissionFailed,
+    InvalidRunner,
+    NoAuthority,
+    InvalidCoordinator
 }

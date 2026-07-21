@@ -2,6 +2,8 @@ public enum InteractionFailureReason
 {
     None,
     InvalidTarget,
+    InteractionDisabled,
+    InteractorUnavailable,
     MissingStateAuthority,
     TargetUnavailable,
     ReceiverNotFound,

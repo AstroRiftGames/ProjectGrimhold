@@ -153,9 +153,10 @@ public class MainMenuController : MonoBehaviour
         SetUIInteractable(false);
         _statusText.text = "Joining...";
 
+        bool success = false;
         try
         {
-            await launcher.StartSessionAsync(
+            success = await launcher.StartSessionAsync(
                 roomCodeInput.text,
                 GameMode.Client,
                 _selectedClass);
@@ -164,16 +165,20 @@ public class MainMenuController : MonoBehaviour
         {
             Debug.LogError($"Error joining room: {ex.Message}");
             _statusText.text = $"Failed to join room: {ex.Message}";
+            success = false;
         }
 
-        if (launcher.Runner != null)
+        if (success && launcher.Runner != null)
         {
             ShowLobby();
         }
         else
         {
             SetUIInteractable(true);
-            _statusText.text = "";
+            if (_statusText.text == "Joining...")
+            {
+                _statusText.text = "Failed to join room: Session is closed, full, or does not exist.";
+            }
         }
     }
 
@@ -182,7 +187,7 @@ public class MainMenuController : MonoBehaviour
         menuPanel.SetActive(false);
         lobbyPanel.SetActive(true);
 
-        lobbyMenu.Initialize(launcher.Runner);
+        lobbyMenu.Initialize(launcher.Runner, launcher);
     }
 
     private string GenerateRoomCode()

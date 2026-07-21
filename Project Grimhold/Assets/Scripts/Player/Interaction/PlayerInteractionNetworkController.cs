@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Fusion;
 using UnityEngine;
 
@@ -29,7 +30,7 @@ public sealed class PlayerInteractionNetworkController : NetworkBehaviour
     private IInteractionTargetQuery _query;
     private EntityRegistry _registry;
     private bool _dependenciesValid;
-    private int _observedInteractionSequence;
+    private readonly Queue<InteractionPresentationEvent> _pendingPresentationEvents = new();
 
     [Networked]
     private NetworkButtons PreviousButtons { get; set; }
@@ -49,8 +50,18 @@ public sealed class PlayerInteractionNetworkController : NetworkBehaviour
     [Networked]
     private NetworkBool LastInteractionConsumed { get; set; }
 
+    [Networked]
+    private int LastInteractionFailureReasonValue { get; set; }
+
     /// <summary>
-    /// Local event raised during Render when a successful interaction is detected.
+    /// Gets the latest authoritative interaction attempt sequence.
+    /// Presentation uses it only to establish a non-replaying baseline.
+    /// </summary>
+    public int CurrentInteractionSequence => InteractionSequence;
+
+    /// <summary>
+    /// Local event raised during Render for each authoritative interaction result
+    /// delivered to this object's Input Authority.
     /// </summary>
     public event Action<InteractionPresentationEvent> InteractionResolved;
 
@@ -63,8 +74,6 @@ public sealed class PlayerInteractionNetworkController : NetworkBehaviour
     {
         CacheDependencies();
         _dependenciesValid = ValidateDependencies();
-
-        _observedInteractionSequence = InteractionSequence;
 
         _registry = Runner.GetComponent<EntityRegistry>();
         if (_registry == null)
@@ -101,19 +110,24 @@ public sealed class PlayerInteractionNetworkController : NetworkBehaviour
             return;
         }
 
-        // Control check
         if (_movementController == null || !_movementController.IsControlEnabled)
         {
+            RecordInteractionResult(default, Runner.Tick, InteractionResult.Rejected(InteractionFailureReason.InteractionDisabled));
             return;
         }
 
-        // Death / Alive check
         if (_character == null || !_character.IsAlive)
         {
+            RecordInteractionResult(default, Runner.Tick, InteractionResult.Rejected(InteractionFailureReason.InteractorUnavailable));
             return;
         }
 
         TryProcessInteraction();
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        _pendingPresentationEvents.Clear();
     }
 
     private void TryProcessInteraction()
@@ -139,38 +153,58 @@ public sealed class PlayerInteractionNetworkController : NetworkBehaviour
             out var resolvedResult
         );
 
-        if (executed)
+        if (!executed)
         {
-            LastInteractionTargetIdValue = resolvedRequest.TargetId.Value;
-            LastInteractionTick = resolvedRequest.SimulationTick;
-            LastInteractionSucceeded = resolvedResult.Success;
-            LastInteractionConsumed = resolvedResult.IsConsumed;
-
-            // Increment sequence to notify local presentation
-            InteractionSequence++;
+            RecordInteractionResult(default, Runner.Tick, InteractionResult.Rejected(InteractionFailureReason.InvalidTarget));
+            return;
         }
+
+        RecordInteractionResult(resolvedRequest.TargetId, resolvedRequest.SimulationTick, resolvedResult);
     }
 
     public override void Render()
     {
-        if (!_dependenciesValid)
+        while (_pendingPresentationEvents.Count > 0)
         {
-            return;
+            InteractionResolved?.Invoke(_pendingPresentationEvents.Dequeue());
         }
+    }
 
-        if (InteractionSequence != _observedInteractionSequence)
-        {
-            InteractionPresentationEvent evt = new InteractionPresentationEvent(
-                _character.Id,
-                new EntityId(LastInteractionTargetIdValue),
-                LastInteractionTick,
-                LastInteractionSucceeded,
-                LastInteractionConsumed
-            );
+    private void RecordInteractionResult(EntityId targetId, int simulationTick, in InteractionResult result)
+    {
+        InteractionSequence++;
+        LastInteractionTargetIdValue = targetId.Value;
+        LastInteractionTick = simulationTick;
+        LastInteractionSucceeded = result.Success;
+        LastInteractionConsumed = result.IsConsumed;
+        LastInteractionFailureReasonValue = (int)result.FailureReason;
 
-            InteractionResolved?.Invoke(evt);
-            _observedInteractionSequence = InteractionSequence;
-        }
+        RPC_ReceiveInteractionResult(
+            InteractionSequence,
+            targetId.Value,
+            simulationTick,
+            result.Success,
+            result.IsConsumed,
+            (int)result.FailureReason);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void RPC_ReceiveInteractionResult(
+        int sequence,
+        int targetIdValue,
+        int simulationTick,
+        bool succeeded,
+        bool consumed,
+        int failureReasonValue)
+    {
+        _pendingPresentationEvents.Enqueue(new InteractionPresentationEvent(
+            sequence,
+            _character != null ? _character.Id : default,
+            new EntityId(targetIdValue),
+            simulationTick,
+            succeeded,
+            consumed,
+            (InteractionFailureReason)failureReasonValue));
     }
 
     private void CacheDependencies()

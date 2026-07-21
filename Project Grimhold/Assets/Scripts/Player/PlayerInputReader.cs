@@ -1,5 +1,7 @@
+using System;
 using Fusion;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Captures local device input and exposes it as gameplay intentions.
@@ -26,6 +28,15 @@ public sealed class PlayerInputReader : MonoBehaviour
     private NetworkButtons _buttons;
     private NetworkButtons _pendingButtons;
     private bool _resetAccumulatedButtons;
+    private int _gameplaySuppressionCount;
+    private bool _primaryAttackRequiresRelease;
+    private bool _interactRequiresRelease;
+
+    /// <summary>
+    /// Raised for the local-only action that opens or closes the raid inventory.
+    /// This intention is never included in <see cref="PlayerNetworkInput"/>.
+    /// </summary>
+    public event Action InventoryToggleRequested;
 
     private void Awake()
     {
@@ -37,22 +48,29 @@ public sealed class PlayerInputReader : MonoBehaviour
     private void OnEnable()
     {
         _inputActions.Gameplay.Interact.performed += OnInteractPerformed;
+        _inputActions.Gameplay.Interact.canceled += OnInteractCanceled;
+        _inputActions.Gameplay.PrimaryAttack.canceled += OnPrimaryAttackCanceled;
+        _inputActions.LocalUI.ToggleInventory.performed += OnToggleInventoryPerformed;
         _inputActions.Gameplay.Enable();
+        _inputActions.LocalUI.Enable();
     }
 
     private void Update()
     {
         ResetAccumulatedButtonsIfRequired();
 
-        ReadMovement();
-        ReadAimWorldPosition();
+        UpdateDiscreteButtonRearm();
         ReadPrimaryAttack();
     }
 
     private void OnDisable()
     {
         _inputActions.Gameplay.Interact.performed -= OnInteractPerformed;
+        _inputActions.Gameplay.Interact.canceled -= OnInteractCanceled;
+        _inputActions.Gameplay.PrimaryAttack.canceled -= OnPrimaryAttackCanceled;
+        _inputActions.LocalUI.ToggleInventory.performed -= OnToggleInventoryPerformed;
         _inputActions.Gameplay.Disable();
+        _inputActions.LocalUI.Disable();
         ResetInputState();
     }
 
@@ -61,9 +79,45 @@ public sealed class PlayerInputReader : MonoBehaviour
         _inputActions.Dispose();
     }
 
-    private void OnInteractPerformed(UnityEngine.InputSystem.InputAction.CallbackContext context)
+    private void OnInteractPerformed(InputAction.CallbackContext context)
     {
+        if (IsGameplayInputSuppressed || _interactRequiresRelease)
+        {
+            return;
+        }
+
         _pendingButtons.Set(PlayerInputButton.Interact, true);
+    }
+
+    private void OnToggleInventoryPerformed(InputAction.CallbackContext context)
+    {
+        InventoryToggleRequested?.Invoke();
+    }
+
+    private void OnInteractCanceled(InputAction.CallbackContext context)
+    {
+        _interactRequiresRelease = false;
+    }
+
+    private void OnPrimaryAttackCanceled(InputAction.CallbackContext context)
+    {
+        _primaryAttackRequiresRelease = false;
+    }
+
+    /// <summary>
+    /// Acquires ownership of a local gameplay-input suppression.
+    /// Continuous and discrete gameplay intentions produce a default network payload
+    /// until every acquisition has been released.
+    /// </summary>
+    public IDisposable AcquireGameplayInputSuppression()
+    {
+        if (_gameplaySuppressionCount == 0)
+        {
+            ResetGameplayIntent();
+        }
+
+        _gameplaySuppressionCount++;
+        return new GameplayInputSuppression(this);
     }
 
     /// <summary>
@@ -72,6 +126,15 @@ public sealed class PlayerInputReader : MonoBehaviour
     /// </summary>
     public PlayerNetworkInput ConsumeNetworkInput()
     {
+        if (IsGameplayInputSuppressed)
+        {
+            ResetGameplayIntent();
+            return default;
+        }
+
+        ReadMovement();
+        ReadAimWorldPosition();
+
         // The reset is deferred until the next Update. This preserves a
         // latched press when Fusion requests input more than once in the
         // same rendered frame.
@@ -106,6 +169,7 @@ public sealed class PlayerInputReader : MonoBehaviour
     {
         if (_worldCamera == null)
         {
+            _aimWorldPosition = Vector2.zero;
             return;
         }
 
@@ -123,6 +187,7 @@ public sealed class PlayerInputReader : MonoBehaviour
 
         if (distanceToAimPlane < 0f)
         {
+            _aimWorldPosition = Vector2.zero;
             return;
         }
 
@@ -143,6 +208,23 @@ public sealed class PlayerInputReader : MonoBehaviour
     {
         var primaryAttackAction =
             _inputActions.Gameplay.PrimaryAttack;
+
+        if (IsGameplayInputSuppressed)
+        {
+            _buttons.Set(PlayerInputButton.PrimaryAttack, false);
+            return;
+        }
+
+        if (_primaryAttackRequiresRelease)
+        {
+            if (!primaryAttackAction.IsPressed())
+            {
+                _primaryAttackRequiresRelease = false;
+            }
+
+            _buttons.Set(PlayerInputButton.PrimaryAttack, false);
+            return;
+        }
 
         AccumulateButton(
             PlayerInputButton.PrimaryAttack,
@@ -179,9 +261,77 @@ public sealed class PlayerInputReader : MonoBehaviour
     {
         _moveDirection = Vector2.zero;
         _aimWorldPosition = Vector2.zero;
+        ResetDiscreteInputState();
+    }
+
+    private void ResetGameplayIntent()
+    {
+        _moveDirection = Vector2.zero;
+        _aimWorldPosition = Vector2.zero;
+        ResetDiscreteInputState();
+    }
+
+    private void ResetDiscreteInputState()
+    {
         _buttons = default;
         _pendingButtons = default;
         _resetAccumulatedButtons = false;
+    }
+
+    private void UpdateDiscreteButtonRearm()
+    {
+        if (IsGameplayInputSuppressed)
+        {
+            ResetDiscreteInputState();
+            return;
+        }
+
+        if (_interactRequiresRelease && !_inputActions.Gameplay.Interact.IsPressed())
+        {
+            _interactRequiresRelease = false;
+        }
+    }
+
+    private void ReleaseGameplayInputSuppression()
+    {
+        if (_gameplaySuppressionCount <= 0)
+        {
+            return;
+        }
+
+        _gameplaySuppressionCount--;
+        if (_gameplaySuppressionCount > 0)
+        {
+            return;
+        }
+
+        ResetGameplayIntent();
+        _primaryAttackRequiresRelease = _inputActions.Gameplay.PrimaryAttack.IsPressed();
+        _interactRequiresRelease = _inputActions.Gameplay.Interact.IsPressed();
+    }
+
+    private bool IsGameplayInputSuppressed => _gameplaySuppressionCount > 0;
+
+    private sealed class GameplayInputSuppression : IDisposable
+    {
+        private PlayerInputReader _owner;
+
+        public GameplayInputSuppression(PlayerInputReader owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            if (_owner == null)
+            {
+                return;
+            }
+
+            PlayerInputReader owner = _owner;
+            _owner = null;
+            owner.ReleaseGameplayInputSuppression();
+        }
     }
 
     private void CacheDependencies()

@@ -15,7 +15,25 @@ public sealed class LootDefinitionCatalog : ScriptableObject
     private Dictionary<string, LootDefinition> _definitionsById;
 
     [NonSerialized]
+    private List<LootDefinition> _sortedDefinitions;
+
+    [NonSerialized]
+    private Dictionary<LootId, int> _indicesById;
+
+    [NonSerialized]
     private bool _isCacheDirty = true;
+
+    /// <summary>
+    /// Gets the number of unique definitions available through the catalog.
+    /// </summary>
+    public int DefinitionCount
+    {
+        get
+        {
+            EnsureCache();
+            return _sortedDefinitions.Count;
+        }
+    }
 
     private void OnEnable()
     {
@@ -43,12 +61,51 @@ public sealed class LootDefinitionCatalog : ScriptableObject
             return false;
         }
 
-        if (_isCacheDirty || _definitionsById == null)
+        EnsureCache();
+
+        return _definitionsById.TryGetValue(id, out definition);
+    }
+
+    /// <summary>
+    /// Attempts to resolve the deterministic network index assigned to a loot definition.
+    /// Indices are assigned by sorting valid unique IDs with ordinal comparison.
+    /// </summary>
+    public bool TryGetIndex(LootId lootId, out int index)
+    {
+        index = default;
+
+        if (string.IsNullOrWhiteSpace(lootId.Value))
+        {
+            return false;
+        }
+
+        EnsureCache();
+        return _indicesById.TryGetValue(lootId, out index);
+    }
+
+    /// <summary>
+    /// Attempts to resolve a definition from its deterministic network index.
+    /// </summary>
+    public bool TryGetByIndex(int index, out LootDefinition definition)
+    {
+        EnsureCache();
+
+        if (index < 0 || index >= _sortedDefinitions.Count)
+        {
+            definition = null;
+            return false;
+        }
+
+        definition = _sortedDefinitions[index];
+        return true;
+    }
+
+    private void EnsureCache()
+    {
+        if (_isCacheDirty || _definitionsById == null || _sortedDefinitions == null || _indicesById == null)
         {
             RebuildCache();
         }
-
-        return _definitionsById.TryGetValue(id, out definition);
     }
 
     /// <summary>
@@ -77,6 +134,16 @@ public sealed class LootDefinitionCatalog : ScriptableObject
         }
 
         _definitionsById = rebuilt;
+
+        _sortedDefinitions = new List<LootDefinition>(rebuilt.Values);
+        _sortedDefinitions.Sort((left, right) => string.CompareOrdinal(left.Id, right.Id));
+
+        _indicesById = new Dictionary<LootId, int>();
+        for (int i = 0; i < _sortedDefinitions.Count; i++)
+        {
+            _indicesById.Add(_sortedDefinitions[i].LootId, i);
+        }
+
         _isCacheDirty = false;
     }
 

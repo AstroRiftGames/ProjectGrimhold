@@ -1,74 +1,214 @@
 #if UNITY_INCLUDE_TESTS
+using System;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.TestTools;
-using System.Collections;
-using System.Reflection;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
+using Assert = NUnit.Framework.Assert;
 
 namespace Assets.Tests.PlayMode.Player
 {
-    public class PlayerInputReaderPlayModeTests
+    public sealed class PlayerInputReaderPlayModeTests
     {
+        private GameObject _cameraHolder;
         private GameObject _holder;
         private PlayerInputReader _reader;
+        private Keyboard _keyboard;
+        private Mouse _mouse;
+        private object _inputTestFixture;
+        private Type _inputTestFixtureType;
 
         [SetUp]
         public void SetUp()
         {
-            var old = GameObject.Find("PlayerInputReaderHolder");
-            if (old != null)
-            {
-                Object.DestroyImmediate(old);
-            }
+            // The package test fixture is not auto-referenced by Unity's predefined
+            // test assembly, so load it without changing the production assembly layout.
+            _inputTestFixtureType = Type.GetType(
+                "UnityEngine.InputSystem.InputTestFixture, Unity.InputSystem.TestFramework",
+                true);
+            _inputTestFixture = Activator.CreateInstance(_inputTestFixtureType);
+            _inputTestFixtureType.GetMethod("Setup").Invoke(_inputTestFixture, null);
+
+            _keyboard = InputSystem.AddDevice<Keyboard>();
+            _mouse = InputSystem.AddDevice<Mouse>();
+
+            _cameraHolder = new GameObject("InputTestCamera");
+            _cameraHolder.tag = "MainCamera";
+            _cameraHolder.transform.position = new Vector3(0f, 0f, -10f);
+            Camera camera = _cameraHolder.AddComponent<Camera>();
+            camera.orthographic = true;
 
             _holder = new GameObject("PlayerInputReaderHolder");
             _reader = _holder.AddComponent<PlayerInputReader>();
+            ReadInputActions().asset.devices = new InputDevice[] { _keyboard, _mouse };
+            EnsureReaderInputEnabled();
         }
 
         [TearDown]
         public void TearDown()
         {
-            if (_holder != null)
-            {
-                Object.DestroyImmediate(_holder);
-            }
+            UnityEngine.Object.DestroyImmediate(_holder);
+            UnityEngine.Object.DestroyImmediate(_cameraHolder);
+            InputSystem.RemoveDevice(_mouse);
+            InputSystem.RemoveDevice(_keyboard);
+            _inputTestFixtureType.GetMethod("TearDown").Invoke(_inputTestFixture, null);
         }
 
-        [UnityTest]
-        public IEnumerator OnDisable_ClearsPendingInteract_PlayMode()
+        [Test]
+        public void Suppression_ProducesDefaultPayload()
         {
-            var method = typeof(PlayerInputReader).GetMethod("OnInteractPerformed", 
-                BindingFlags.NonPublic | BindingFlags.Instance);
-            Assert.That(method, Is.Not.Null);
+            SetKey(Key.W, true);
+            SetMousePosition(new Vector2(200f, 150f));
 
-            // 1. Generate Interact
-            method.Invoke(_reader, new object[] { default(UnityEngine.InputSystem.InputAction.CallbackContext) });
+            using IDisposable suppression = _reader.AcquireGameplayInputSuppression();
 
-            // 2. Confirm that the first consume contains Interact
-            PlayerNetworkInput result1 = _reader.ConsumeNetworkInput();
-            Assert.IsTrue(result1.Buttons.IsSet(PlayerInputButton.Interact), "First consume should contain Interact");
+            Assert.That(_reader.ConsumeNetworkInput().Equals(default(PlayerNetworkInput)), Is.True);
+        }
 
-            // 3. Generate another pending interaction
-            method.Invoke(_reader, new object[] { default(UnityEngine.InputSystem.InputAction.CallbackContext) });
+        [Test]
+        public void ReleasingSuppression_RestoresHeldMovementImmediately()
+        {
+            SetKey(Key.W, true);
+            Assert.That(_keyboard.wKey.isPressed, Is.True);
+            Assert.That(ReadInputActions().Gameplay.Move.ReadValue<Vector2>(), Is.EqualTo(Vector2.up));
+            IDisposable suppression = _reader.AcquireGameplayInputSuppression();
+            Assert.That(_reader.ConsumeNetworkInput().MoveDirection, Is.EqualTo(Vector2.zero));
 
-            // 4. Disable the component
+            suppression.Dispose();
+
+            Assert.That(_reader.ConsumeNetworkInput().MoveDirection, Is.EqualTo(Vector2.up));
+        }
+
+        [Test]
+        public void ReleasingSuppression_RecalculatesAimWithoutNewPointerMovement()
+        {
+            SetMousePosition(new Vector2(250f, 180f));
+            Vector2 expectedAim = _reader.ConsumeNetworkInput().AimWorldPosition;
+            IDisposable suppression = _reader.AcquireGameplayInputSuppression();
+            Assert.That(_reader.ConsumeNetworkInput().AimWorldPosition, Is.EqualTo(Vector2.zero));
+
+            suppression.Dispose();
+
+            Assert.That(_reader.ConsumeNetworkInput().AimWorldPosition, Is.EqualTo(expectedAim));
+        }
+
+        [Test]
+        public void DiscreteButtonsPressedDuringSuppression_AreDiscardedUntilNewPress()
+        {
+            IDisposable suppression = _reader.AcquireGameplayInputSuppression();
+            SetMouseLeft(true);
+            SetKey(Key.E, true);
+
+            suppression.Dispose();
+            PlayerNetworkInput heldAfterClose = _reader.ConsumeNetworkInput();
+            Assert.That(heldAfterClose.Buttons.IsSet(PlayerInputButton.PrimaryAttack), Is.False);
+            Assert.That(heldAfterClose.Buttons.IsSet(PlayerInputButton.Interact), Is.False);
+
+            SetMouseLeft(false);
+            SetKey(Key.E, false);
+            SetMouseLeft(true);
+            SetKey(Key.E, true);
+            InvokeReaderLifecycle("Update");
+
+            PlayerNetworkInput newPress = _reader.ConsumeNetworkInput();
+            Assert.That(newPress.Buttons.IsSet(PlayerInputButton.PrimaryAttack), Is.True);
+            Assert.That(newPress.Buttons.IsSet(PlayerInputButton.Interact), Is.True);
+        }
+
+        [Test]
+        public void InventoryToggle_RemainsAvailableDuringSuppression()
+        {
+            int toggleCount = 0;
+            _reader.InventoryToggleRequested += () => toggleCount++;
+            using IDisposable suppression = _reader.AcquireGameplayInputSuppression();
+
+            SetKey(Key.Tab, true);
+
+            Assert.That(toggleCount, Is.EqualTo(1));
+            Assert.That(_reader.ConsumeNetworkInput().Equals(default(PlayerNetworkInput)), Is.True);
+        }
+
+        [Test]
+        public void DisableEnable_ClearsPendingDiscreteInputAndKeepsMapsUsable()
+        {
+            SetKey(Key.E, true);
             _reader.enabled = false;
-            yield return null;
-
-            // 5. Reactivate the component
             _reader.enabled = true;
-            yield return null;
 
-            // 6. Consume input and check that Interact is false
-            PlayerNetworkInput result2 = _reader.ConsumeNetworkInput();
-            Assert.IsFalse(result2.Buttons.IsSet(PlayerInputButton.Interact), "Pending interact should be cleared on disable");
+            Assert.That(
+                _reader.ConsumeNetworkInput().Buttons.IsSet(PlayerInputButton.Interact),
+                Is.False);
 
-            // 7. Verify that a new press after reactivation registers Interact = true
-            method.Invoke(_reader, new object[] { default(UnityEngine.InputSystem.InputAction.CallbackContext) });
-            PlayerNetworkInput result3 = _reader.ConsumeNetworkInput();
-            Assert.IsTrue(result3.Buttons.IsSet(PlayerInputButton.Interact), "New press after reactivation should be registered");
+            SetKey(Key.E, false);
+            SetKey(Key.E, true);
+
+            Assert.That(
+                _reader.ConsumeNetworkInput().Buttons.IsSet(PlayerInputButton.Interact),
+                Is.True);
+        }
+
+        private void SetKey(Key key, bool pressed)
+        {
+            SetControl(_keyboard[key], pressed ? 1f : 0f);
+        }
+
+        private void SetMousePosition(Vector2 position)
+        {
+            SetControl(_mouse.position, position);
+        }
+
+        private void SetMouseLeft(bool pressed)
+        {
+            SetControl(_mouse.leftButton, pressed ? 1f : 0f);
+        }
+
+        private static void SetControl<TValue>(
+            InputControl<TValue> control,
+            TValue value)
+            where TValue : struct
+        {
+            using (DeltaStateEvent.From(control, out InputEventPtr eventPtr))
+            {
+                eventPtr.time = InputState.currentTime;
+                control.WriteValueIntoEvent(value, eventPtr);
+                InputSystem.QueueEvent(eventPtr);
+            }
+
+            InputSystem.Update();
+        }
+
+        private void EnsureReaderInputEnabled()
+        {
+            PlayerInputActions actions = ReadInputActions();
+
+            if (actions.Gameplay.enabled)
+            {
+                InvokeReaderLifecycle("OnDisable");
+            }
+
+            InvokeReaderLifecycle("OnEnable");
+        }
+
+        private void InvokeReaderLifecycle(string methodName)
+        {
+            MethodInfo method = typeof(PlayerInputReader).GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(_reader, null);
+        }
+
+        private PlayerInputActions ReadInputActions()
+        {
+            FieldInfo actionsField = typeof(PlayerInputReader).GetField(
+                "_inputActions",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(actionsField, Is.Not.Null);
+            var actions = (PlayerInputActions)actionsField.GetValue(_reader);
+            Assert.That(actions, Is.Not.Null);
+            return actions;
         }
     }
 }
 #endif
-
