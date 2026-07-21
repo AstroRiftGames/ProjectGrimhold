@@ -4,6 +4,8 @@ using UnityEngine;
 /// <summary>
 /// Concrete strategy for melee attacks.
 /// Uses IAttackTargetQuery to query targets spatially and IDamageResolver to apply damage.
+/// Entity-type agnostic: works for both Player and Enemy entities since it resolves
+/// dependencies through the GameObject hierarchy and delegates to interface-based components.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class MeleeAttack : MonoBehaviour, IAttack
@@ -63,9 +65,31 @@ public sealed class MeleeAttack : MonoBehaviour, IAttack
             _targetQuery = _targetQuerySource as IAttackTargetQuery;
         }
 
+        if (_targetQuery == null)
+        {
+            _targetQuery = GetComponent<IAttackTargetQuery>() ?? GetComponentInChildren<IAttackTargetQuery>() ?? GetComponentInParent<IAttackTargetQuery>();
+            if (_targetQuery is MonoBehaviour queryMb)
+            {
+                _targetQuerySource = queryMb;
+            }
+        }
+
         if (_damageResolverSource != null)
         {
             _damageResolver = _damageResolverSource as IDamageResolver;
+        }
+
+        if (_damageResolver == null)
+        {
+            _damageResolver = GetComponent<IDamageResolver>() ?? GetComponentInChildren<IDamageResolver>() ?? GetComponentInParent<IDamageResolver>();
+            if (_damageResolver == null)
+            {
+                _damageResolver = FindAnyObjectByType<DamageResolver>(FindObjectsInactive.Exclude);
+            }
+            if (_damageResolver is MonoBehaviour resolverMb)
+            {
+                _damageResolverSource = resolverMb;
+            }
         }
     }
 

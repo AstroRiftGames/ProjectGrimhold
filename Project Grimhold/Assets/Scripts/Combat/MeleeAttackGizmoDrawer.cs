@@ -2,7 +2,9 @@ using UnityEngine;
 
 #if UNITY_EDITOR
 /// <summary>
-/// Dibuja en el Editor el área de ataque y la dirección conceptual de MeleeAttack.
+/// Draws the melee attack area and direction in the Editor.
+/// Works for both Player and Enemy entities by resolving the movement controller
+/// through interface-based queries (IMovementState via EnemyMovementAIController or PlayerMovementNetworkController).
 /// </summary>
 public sealed class MeleeAttackGizmoDrawer : MonoBehaviour
 {
@@ -13,7 +15,9 @@ public sealed class MeleeAttackGizmoDrawer : MonoBehaviour
     private MeleeAttackConfig _config;
 
     [SerializeField]
-    private PlayerMovementNetworkController _movementController;
+    private MonoBehaviour _movementControllerSource;
+
+    private IMovementState _movementState;
 
     private void OnDrawGizmosSelected()
     {
@@ -25,18 +29,8 @@ public sealed class MeleeAttackGizmoDrawer : MonoBehaviour
         Vector2 origin = _attackOrigin != null ? (Vector2)_attackOrigin.position : (Vector2)transform.position;
         Vector2 direction = Vector2.down;
 
-        if (_movementController != null && _movementController.Object != null && _movementController.Object.IsValid)
-        {
-            direction = _movementController.FacingDirection;
-        }
-        else if (Application.isPlaying)
-        {
-            var movement = GetComponentInParent<PlayerMovementNetworkController>();
-            if (movement != null && movement.Object != null && movement.Object.IsValid)
-            {
-                direction = movement.FacingDirection;
-            }
-        }
+        // Try to resolve facing direction from any IMovementState component (Player or Enemy)
+        TryResolveFacingDirection(ref direction);
 
         if (direction.sqrMagnitude < 0.0001f)
         {
@@ -46,25 +40,51 @@ public sealed class MeleeAttackGizmoDrawer : MonoBehaviour
 
         Vector2 attackCenter = origin + direction * _config.Range;
 
-        // Dibujar punto de origen
+        // Draw origin point
         Gizmos.color = Color.blue;
         Gizmos.DrawSphere(origin, 0.05f);
 
-        // Dibujar línea desde origen hasta el centro del área
+        // Draw line from origin to center of area
         Gizmos.color = Color.cyan;
         Gizmos.DrawLine(origin, attackCenter);
 
-        // Dibujar dirección normalizada
+        // Draw normalized direction
         Gizmos.color = Color.yellow;
         Gizmos.DrawLine(origin, origin + direction * 0.5f);
 
-        // Dibujar círculo en el centro real del área
+        // Draw circle at the actual attack area center
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(attackCenter, _config.Radius);
 
-        // Dibujar línea desde origen hasta el extremo máximo del círculo
+        // Draw line from origin to the farthest edge of the circle
         Gizmos.color = new Color(1f, 0.5f, 0f, 0.5f);
         Gizmos.DrawLine(origin, attackCenter + direction * _config.Radius);
+    }
+
+    private void TryResolveFacingDirection(ref Vector2 direction)
+    {
+        // Try from the serialized source
+        if (_movementControllerSource != null)
+        {
+            _movementState = _movementControllerSource as IMovementState;
+            if (_movementState != null && _movementState.FacingDirection.sqrMagnitude > 0.0001f)
+            {
+                direction = _movementState.FacingDirection;
+                return;
+            }
+        }
+
+        if (!Application.isPlaying)
+        {
+            return;
+        }
+
+        // Try to find any IMovementState component in parent hierarchy
+        _movementState = GetComponentInParent<IMovementState>();
+        if (_movementState != null && _movementState.FacingDirection.sqrMagnitude > 0.0001f)
+        {
+            direction = _movementState.FacingDirection;
+        }
     }
 }
 #endif

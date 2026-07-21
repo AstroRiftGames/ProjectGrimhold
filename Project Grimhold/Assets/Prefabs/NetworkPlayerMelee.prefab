@@ -246,7 +246,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MeleeAttackGizmoDrawer
   _attackOrigin: {fileID: 2070722618038890248}
   _config: {fileID: 11400000, guid: 51a16f09a8a5c954dbf55fa2549aed51, type: 2}
-  _movementController: {fileID: 3682681716924389183}
+  _movementControllerSource: {fileID: 3682681716924389183}
 --- !u!114 &8168485454914002887 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 2425433471524800765, guid: fea3a7b256f965a4eb9b965832939741, type: 3}

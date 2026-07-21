@@ -4,6 +4,8 @@ using UnityEngine;
 /// Concrete strategy for ranged attacks.
 /// Translates an <see cref="AttackRequest"/> into a <see cref="ProjectileSpawnRequest"/>
 /// and delegates creation to the projectile spawner.
+/// Entity-type agnostic: works for both Player and Enemy entities since it resolves
+/// dependencies through the GameObject hierarchy and delegates to interface-based components.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class RangedAttack : MonoBehaviour, IAttack
@@ -33,6 +35,19 @@ public sealed class RangedAttack : MonoBehaviour, IAttack
         if (_projectileSpawnerSource != null)
         {
             _projectileSpawner = _projectileSpawnerSource as IProjectileSpawner;
+        }
+
+        if (_projectileSpawner == null)
+        {
+            _projectileSpawner = GetComponent<IProjectileSpawner>() ?? GetComponentInChildren<IProjectileSpawner>() ?? GetComponentInParent<IProjectileSpawner>();
+            if (_projectileSpawner == null)
+            {
+                _projectileSpawner = FindAnyObjectByType<FusionProjectileSpawner>(FindObjectsInactive.Exclude);
+            }
+            if (_projectileSpawner is MonoBehaviour spawnerMb)
+            {
+                _projectileSpawnerSource = spawnerMb;
+            }
         }
     }
 

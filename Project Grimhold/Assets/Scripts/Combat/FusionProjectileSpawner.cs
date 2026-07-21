@@ -4,6 +4,9 @@ using UnityEngine;
 /// <summary>
 /// Unity/Fusion network adapter to spawn projectiles authoritatively.
 /// Implements <see cref="IProjectileSpawner"/> as a <see cref="NetworkBehaviour"/>.
+/// Entity-type agnostic: works for both Player and Enemy entities since it resolves
+/// the IDamageResolver dependency through the GameObject hierarchy and spawns
+/// projectiles that can damage any IDamageable target.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class FusionProjectileSpawner : NetworkBehaviour, IProjectileSpawner

@@ -7,7 +7,7 @@ using UnityEngine;
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Kinematic2DMovementMotor))]
-public sealed class PlayerMovementNetworkController : NetworkBehaviour
+public sealed class PlayerMovementNetworkController : NetworkBehaviour, IMovementState
 {
     [SerializeField, Min(0f)]
     private float _moveSpeed = 5f;

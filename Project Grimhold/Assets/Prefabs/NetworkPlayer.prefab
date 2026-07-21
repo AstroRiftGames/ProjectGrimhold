@@ -199,7 +199,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimatorView
   _animator: {fileID: 5232659655046367733}
-  _movementController: {fileID: 7201000000000000005}
+  _movementControllerSource: {fileID: 729366679366126330}
 --- !u!95 &5232659655046367733
 Animator:
   serializedVersion: 7
@@ -267,8 +267,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a18ff23358a77344cbef5b1fbbc6c041, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCombatPresenter
-  _combatController: {fileID: 2769229401594790361}
-  _animatorView: {fileID: 7572879158521877428}
+  _combatControllerSource: {fileID: 729366679366126330}
+  _animatorViewSource: {fileID: 7572879158521877428}
   _weaponPivot: {fileID: 6727737383359403759}
   _weaponSpriteRenderer: {fileID: 4522316450052852347}
   _attackDuration: 0.2
@@ -561,7 +561,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerDefeatPresenter
   _characterBase: {fileID: 729366679366126330}
-  _animatorView: {fileID: 7572879158521877428}
+  _animatorViewSource: {fileID: 7572879158521877428}
   _combatPresenter: {fileID: 2199920047182287500}
   _damageFeedbackPresenter: {fileID: 7490000000000000001}
   _weaponSpriteRenderer: {fileID: 4522316450052852347}

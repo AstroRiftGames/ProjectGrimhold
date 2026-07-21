@@ -21,15 +21,13 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
     {
         public SpawnGroupType Group;
         public Transform[] SpawnPoints;
+        public NetworkPrefabRef[] Prefabs;
         public int amount;
     }
 
     [Header("Player")]
     [SerializeField]
     private PlayerClassCatalog _playerClassCatalog;
-
-    [SerializeField]
-    private NetworkPrefabRef _enemyPrefab;
 
     [Header("Spawn Groups")]
     [SerializeField]
@@ -52,10 +50,6 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         {
             Debug.LogError($"PlayerClassCatalog validation failed: {error}", this);
             _playerClassCatalog = null;
-        }
-        if (_enemyPrefab == null)
-        {
-            Debug.LogError("Enemy prefab reference is missing on NetworkSpawnManager!", this);
         }
 
         _spawnPointLookup.Clear();
@@ -188,7 +182,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
     private void SpawnEnemy(NetworkRunner runner, SpawnGroupType groupType)
     {
-        if (_enemyPrefab == null)
+        if (_spawnGroups[2] == null || _spawnGroups[2].Prefabs == null)
         {
             Debug.LogError("Cannot spawn enemy: Enemy prefab reference is missing.");
             return;
@@ -199,7 +193,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             out Vector3 position,
             out Quaternion rotation);
         NetworkObject enemyObject = runner.Spawn(
-            _enemyPrefab,
+            _spawnGroups[2].Prefabs[UnityEngine.Random.Range(0, _spawnGroups[2].Prefabs.Length)],
             position,
             rotation);
         Debug.Log($"Spawned enemy of group {groupType} at {position}.");

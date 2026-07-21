@@ -199,7 +199,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyAnimatorView
   _animator: {fileID: 5232659655046367733}
-  _movementController: {fileID: 4047341824300862929}
+  _movementControllerSource: {fileID: 7201000000000000004}
 --- !u!95 &5232659655046367733
 Animator:
   serializedVersion: 7
@@ -267,8 +267,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9d910ae83df23f349b9de4ed7bf65246, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatPresenter
-  _combatController: {fileID: 0}
-  _animatorView: {fileID: 4438265232833103325}
+  _combatControllerSource: {fileID: 7201000000000000004}
+  _animatorViewSource: {fileID: 4438265232833103325}
   _weaponPivot: {fileID: 6727737383359403759}
   _weaponSpriteRenderer: {fileID: 4522316450052852347}
   _attackDuration: 0.2
@@ -343,16 +343,18 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2520259848855165086}
+  - component: {fileID: 4980760815071069997}
   - component: {fileID: 7201000000000000004}
+  - component: {fileID: 4047341824300862929}
+  - component: {fileID: 3988879926097982634}
+  - component: {fileID: 2761826599393764438}
+  - component: {fileID: 9200230494000326815}
+  - component: {fileID: 535414226061721754}
   - component: {fileID: 3133108637029622038}
   - component: {fileID: 4462333045026223586}
   - component: {fileID: 7201000000000000002}
   - component: {fileID: 3593981370069743005}
   - component: {fileID: 7201000000000000001}
-  - component: {fileID: 4980760815071069997}
-  - component: {fileID: 4047341824300862929}
-  - component: {fileID: 2761826599393764438}
-  - component: {fileID: 9200230494000326815}
   m_Layer: 7
   m_Name: NetworkEnemy
   m_TagString: Player
@@ -378,6 +380,20 @@ Transform:
   - {fileID: 3964075307184218784}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4980760815071069997
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88b501246baa3da4ba0021fa26573d65, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyCharacter
+  _maxHealth: 100
+  _Health: 0
 --- !u!114 &7201000000000000004
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -397,6 +413,218 @@ MonoBehaviour:
     m_Bits: 64
   _skinWidth: 0.02
   _maxSlideIterations: 3
+--- !u!114 &4047341824300862929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30d8d8baa21330d4ea0ef973bcc17d01, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyMovementAIController
+  _patrolSpeed: 0.75
+  _pursuitSpeedMultiplier: 2
+  _decisionInterval: 1
+  _LOSDistance: 4
+  _attackRange: 1
+  _obstacleLayer:
+    serializedVersion: 2
+    m_Bits: 64
+  _movementMotor: {fileID: 7201000000000000004}
+  _defaultFacingDirection: {x: 0, y: -1}
+  _IsControlEnabled:
+    RawValue: 0
+  _FacingDirection: {x: 0, y: 0}
+  _IsMoving:
+    RawValue: 0
+  _IsAttacking:
+    RawValue: 0
+  _IsOnPursuit:
+    RawValue: 0
+--- !u!114 &3988879926097982634
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a1ea97d386d5a84e9130cbe263ddd6a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyCombatAIController
+  _characterSource: {fileID: 4980760815071069997}
+  _attackOrigin: {fileID: 2520259848855165086}
+  _activeAttackSource: {fileID: 0}
+  _movementController: {fileID: 4047341824300862929}
+  _IsAttackEnabled:
+    RawValue: 0
+--- !u!114 &2761826599393764438
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: daabfeedbac702520844f09ecbbba6e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DamageFeedbackPresenter
+  _characterBase: {fileID: 4980760815071069997}
+  _visualTransform: {fileID: 7397229956843810021}
+  _spriteRenderers:
+  - {fileID: 1066720069559603162}
+  _duration: 0.2
+  _flashColor: {r: 1, g: 0, b: 0, a: 1}
+  _maxScaleMultiplier: 1.08
+  _flashCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: -1
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: -1
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  _scaleCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.5
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  _healthEpsilon: 0.001
+--- !u!114 &9200230494000326815
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 55989dcb705551b478edd72611afa1e4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyDefeatPresenter
+  _characterBase: {fileID: 4980760815071069997}
+  _animatorViewSource: {fileID: 0}
+  _combatPresenter: {fileID: 1796254217434303615}
+  _damageFeedbackPresenter: {fileID: 2761826599393764438}
+  _weaponSpriteRenderer: {fileID: 4522316450052852347}
+  _visualTransform: {fileID: 7397229956843810021}
+  _spriteRenderers:
+  - {fileID: 1066720069559603162}
+  _bodyVisualRoot: {fileID: 1221760144332657486}
+  _combatVisualRoot: {fileID: 2408805181285633772}
+  _transitionDuration: 0.5
+  _hideDelayAfterTransition: 1.5
+  _targetRotationAngle: 90
+  _rotationCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  _targetAlpha: 0.6
+  _alphaCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!114 &535414226061721754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba6e9ecc0c8b7a941af085f53dd307e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DamageResolver
 --- !u!114 &3133108637029622038
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -502,9 +730,11 @@ MonoBehaviour:
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 7201000000000000001}
-  - {fileID: 3133108637029622038}
   - {fileID: 4980760815071069997}
   - {fileID: 4047341824300862929}
+  - {fileID: 3988879926097982634}
+  - {fileID: 535414226061721754}
+  - {fileID: 3133108637029622038}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &7201000000000000001
 MonoBehaviour:
@@ -546,197 +776,6 @@ MonoBehaviour:
     MinImpactfulCollisionAlignment: 0.3
     ImpactStartCorrectionTime: 0.1
     ImpactCorrectionTimeComplete: 0.3
---- !u!114 &4980760815071069997
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4369124737019072436}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 88b501246baa3da4ba0021fa26573d65, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyCharacter
-  _maxHealth: 100
-  _Health: 0
---- !u!114 &4047341824300862929
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4369124737019072436}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 30d8d8baa21330d4ea0ef973bcc17d01, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyMovementAIController
-  _patrolSpeed: 0.75
-  _pursuitSpeedMultiplier: 2
-  _LOSDistance: 4
-  _attackRange: 1
-  _obstacleLayer:
-    serializedVersion: 2
-    m_Bits: 64
-  _movementMotor: {fileID: 7201000000000000004}
-  _defaultFacingDirection: {x: 0, y: -1}
-  _IsControlEnabled:
-    RawValue: 0
-  _FacingDirection: {x: 0, y: 0}
-  _IsMoving:
-    RawValue: 0
---- !u!114 &2761826599393764438
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4369124737019072436}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: daabfeedbac702520844f09ecbbba6e9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DamageFeedbackPresenter
-  _characterBase: {fileID: 4980760815071069997}
-  _visualTransform: {fileID: 7397229956843810021}
-  _spriteRenderers:
-  - {fileID: 1066720069559603162}
-  _duration: 0.2
-  _flashColor: {r: 1, g: 0, b: 0, a: 1}
-  _maxScaleMultiplier: 1.08
-  _flashCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 1
-      inSlope: 0
-      outSlope: -1
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 0
-      inSlope: -1
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  _scaleCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 0.5
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  _healthEpsilon: 0.001
---- !u!114 &9200230494000326815
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4369124737019072436}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 55989dcb705551b478edd72611afa1e4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyDefeatPresenter
-  _characterBase: {fileID: 4980760815071069997}
-  _animatorView: {fileID: 4438265232833103325}
-  _combatPresenter: {fileID: 0}
-  _damageFeedbackPresenter: {fileID: 2761826599393764438}
-  _weaponSpriteRenderer: {fileID: 4522316450052852347}
-  _visualTransform: {fileID: 7397229956843810021}
-  _spriteRenderers:
-  - {fileID: 1066720069559603162}
-  _bodyVisualRoot: {fileID: 1221760144332657486}
-  _combatVisualRoot: {fileID: 2408805181285633772}
-  _transitionDuration: 0.5
-  _hideDelayAfterTransition: 1.5
-  _targetRotationAngle: 90
-  _rotationCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  _targetAlpha: 0.6
-  _alphaCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
 --- !u!1 &6258069994273772255
 GameObject:
   m_ObjectHideFlags: 0

@@ -8,22 +8,19 @@ using UnityEngine;
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Kinematic2DMovementMotor))]
-public sealed class EnemyMovementAIController : NetworkBehaviour
+public sealed class EnemyMovementAIController : NetworkBehaviour, IMovementState
 {
     [Min(0f)]
     private float _moveSpeed;
-    [SerializeField, Min(0f)] private float _patrolSpeed;
-    [SerializeField, Min(1f)] private float _pursuitSpeedMultiplier;
-    private float _pursuitSpeed => _patrolSpeed * _pursuitSpeedMultiplier;
+    [SerializeField, Min(0f)] private float _patrolSpeed = 3f;
+    [SerializeField, Min(1f)] private float _pursuitSpeedMultiplier = 1.5f;
+    private float PursuitSpeed => _patrolSpeed * _pursuitSpeedMultiplier;
     private Vector2 _moveDirection;
-    private float _lastDecisionTime;
-    private float _decisionInterval = 1f; // Time interval between decisions in seconds
-    private bool _isOnPursuit = false;
-    private bool _isAttacking = false;
+    [SerializeField] private float _decisionInterval = 1f; // Time interval between decisions in seconds
 
     private Transform[] _targets;
-    [SerializeField] private float _LOSDistance;
-    [SerializeField] private float _attackRange;
+    [SerializeField] private float _LOSDistance = 6f;
+    [SerializeField] private float _attackRange = 1.5f;
     [SerializeField] private LayerMask _obstacleLayer;
 
     [SerializeField]
@@ -45,6 +42,15 @@ public sealed class EnemyMovementAIController : NetworkBehaviour
 
     [Networked]
     public NetworkBool IsMoving { get; private set; }
+
+    [Networked]
+    public NetworkBool IsAttacking { get; private set; }
+
+    [Networked]
+    public NetworkBool IsOnPursuit { get; private set; }
+
+    [Networked]
+    private TickTimer DecisionTimer { get; set; }
 
     private CharacterBase _characterBase;
 
@@ -122,7 +128,7 @@ public sealed class EnemyMovementAIController : NetworkBehaviour
             return Vector2.zero;
         }
 
-        _moveSpeed = _isOnPursuit ? _pursuitSpeed : _patrolSpeed;
+        _moveSpeed = IsOnPursuit ? PursuitSpeed : _patrolSpeed;
 
         return Vector2.ClampMagnitude(
             decision,
@@ -135,21 +141,30 @@ public sealed class EnemyMovementAIController : NetworkBehaviour
         bool hasLOS = HasLOS(target, disToTarget);
         bool onRange = IsInAttackRange(target);
 
-        if(onRange)
+        if (onRange)
         {
             _moveDirection = Vector2.zero;
+            if (target != null)
+            {
+                Vector2 aimDir = (target.position - transform.position).normalized;
+                if (aimDir.sqrMagnitude > ValidDirectionSqrThreshold)
+                {
+                    FacingDirection = aimDir;
+                }
+            }
         }
         else if (hasLOS)
         {
-            //Follow target
+            // Follow target
             _moveDirection = (target.position - transform.position).normalized;
         }
-        else if(Time.time >= _lastDecisionTime + _decisionInterval)
+        else if (DecisionTimer.ExpiredOrNotRunning(Runner))
         {
-            // Randomly choose a direction
+            // Randomly choose a direction deterministically across ticks
             _moveDirection = new Vector2(Random.Range(-1f, 1f), Random.Range(-1f, 1f)).normalized;
-            _lastDecisionTime = Time.time;
+            DecisionTimer = TickTimer.CreateFromSeconds(Runner, _decisionInterval);
         }
+
         decision = _moveDirection;
         return true;
     }
@@ -158,8 +173,7 @@ public sealed class EnemyMovementAIController : NetworkBehaviour
     {
         if (_movementMotor == null)
         {
-            _movementMotor =
-                GetComponent<Kinematic2DMovementMotor>();
+            _movementMotor = GetComponent<Kinematic2DMovementMotor>();
         }
 
         if (_characterBase == null)
@@ -170,24 +184,16 @@ public sealed class EnemyMovementAIController : NetworkBehaviour
 
     private void CheckPotentialTargets()
     {
-        Debug.Log("[Targets] Checking for potential targets...");
-        foreach (var potentialTarget in FindObjectsByType(typeof(PlayerCharacter)))
+        PlayerCharacter[] playerCharacters = FindObjectsByType<PlayerCharacter>(FindObjectsInactive.Exclude);
+        if (playerCharacters == null || playerCharacters.Length == 0)
         {
-            Debug.Log("[Targets] Found potential target: " + potentialTarget.name);
-            
-            if (_targets == null)
-            {
-                Debug.Log("[Targets] Initializing targets array.");
-                _targets = new Transform[1];
-                _targets[0] = potentialTarget.GameObject().transform;
-            }
-            else
-            {
-                Debug.Log("[Targets] Expanding targets array.");
-                int currentLength = _targets.Length;
-                System.Array.Resize(ref _targets, currentLength + 1);
-                _targets[currentLength] = potentialTarget.GameObject().transform;
-            }
+            return;
+        }
+
+        _targets = new Transform[playerCharacters.Length];
+        for (int i = 0; i < playerCharacters.Length; i++)
+        {
+            _targets[i] = playerCharacters[i].transform;
         }
     }
 
@@ -199,7 +205,7 @@ public sealed class EnemyMovementAIController : NetworkBehaviour
         }
 
         Debug.LogError(
-            $"{nameof(PlayerMovementNetworkController)} requires " +
+            $"{nameof(EnemyMovementAIController)} requires " +
             $"{nameof(Kinematic2DMovementMotor)}.",
             this);
 
@@ -212,12 +218,12 @@ public sealed class EnemyMovementAIController : NetworkBehaviour
         disToTarget = float.MaxValue;
         if (_targets == null || _targets.Length == 0)
         {
-            _isOnPursuit = false;
+            IsOnPursuit = false;
             return false;
         }
         else
         {
-            foreach(var t in _targets)
+            foreach (var t in _targets)
             {
                 if (t == null) continue;
                 float distance = Vector2.Distance(transform.position, t.position);
@@ -228,35 +234,35 @@ public sealed class EnemyMovementAIController : NetworkBehaviour
                 }
             }
         }
-        return true;
+        return target != null;
     }
 
     private bool HasLOS(Transform target, float disToTarget)
     {
-        _isOnPursuit = false;
-        
+        IsOnPursuit = false;
+
         if (target == null) return false;
-        
+
         bool outOfRange = disToTarget > _LOSDistance;
         if (outOfRange) return false;
 
         bool blocked = Physics2D.Raycast(transform.position, target.position - transform.position, disToTarget, _obstacleLayer);
-        if(blocked) return false;
+        if (blocked) return false;
 
-        _isOnPursuit = true;
+        IsOnPursuit = true;
         return true;
     }
-        
+
     private bool IsInAttackRange(Transform target)
     {
-        _isAttacking = false;
+        IsAttacking = false;
         if (target == null) return false;
 
         bool isInRange = Vector2.Distance(transform.position, target.position) <= _attackRange;
 
-        if(!isInRange) return false;
+        if (!isInRange) return false;
 
-        _isAttacking = true;
+        IsAttacking = true;
         return true;
     }
 

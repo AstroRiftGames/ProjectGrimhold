@@ -3,14 +3,14 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Network component responsible for processing player attack intentions
-/// and delegating execution to the active attack strategy.
+/// Network component responsible for processing enemy AI combat decisions
+/// and delegating attack execution to the active attack strategy.
 ///
-/// This controller operates with any strategy implementing the
-/// <see cref="IAttack"/> contract, isolating gameplay simulation from visual presentation.
+/// Operates with any strategy implementing the <see cref="IAttack"/> contract,
+/// driven by AI state authority rather than client player input.
 /// </summary>
 [DisallowMultipleComponent]
-public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatController
+public sealed class EnemyCombatAIController : NetworkBehaviour, ICombatController
 {
     [Header("Dependencies")]
     [SerializeField]
@@ -23,7 +23,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
     private MonoBehaviour _activeAttackSource;
 
     [SerializeField]
-    private PlayerMovementNetworkController _movementController;
+    private EnemyMovementAIController _movementController;
 
     private ICharacter _character;
     private IAttack _activeAttack;
@@ -31,15 +31,12 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
     private int _lastObservedSequence;
 
     [Networked]
-    private NetworkButtons PreviousButtons { get; set; }
-
-    [Networked]
     private TickTimer AttackCooldown { get; set; }
 
     [Networked]
     public NetworkBool IsAttackEnabled { get; private set; }
 
-    // Replicated state for local presentation layers
+    // Replicated state for presentation layers
     [Networked]
     private int AttackSequence { get; set; }
 
@@ -56,7 +53,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
     private int LastAttackTick { get; set; }
 
     /// <summary>
-    /// Local event raised during Render when a successful attack execution is detected in the simulation.
+    /// Local event raised during Render when a successful attack execution is detected in simulation.
     /// </summary>
     public event Action<AttackPerformedEvent> AttackPerformed;
 
@@ -70,8 +67,6 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
         CacheDependencies();
         _dependenciesValid = ValidateDependencies();
 
-        // Initialize the local observed sequence with the current network sequence
-        // to prevent triggering events from attacks performed before this proxy spawned.
         _lastObservedSequence = AttackSequence;
 
         if (HasStateAuthority)
@@ -82,45 +77,21 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
 
     public override void FixedUpdateNetwork()
     {
-        if (!_dependenciesValid)
+        if (!_dependenciesValid || !HasStateAuthority)
         {
             return;
         }
 
-        // Read input from Fusion. If no input is available for this tick, exit immediately.
-        if (!GetInput(out PlayerNetworkInput input))
+        if (_movementController == null || _character == null)
         {
             return;
         }
 
-        NetworkButtons currentButtons = input.Buttons;
-        bool attackPressed = false;
+        bool attackRequested = _movementController.IsAttacking;
 
-        if (_activeAttack != null)
+        if (attackRequested && IsAttackEnabled && _character.IsAlive)
         {
-            if (_activeAttack.InputMode == AttackInputMode.Press)
-            {
-                attackPressed = currentButtons.WasPressed(PreviousButtons, PlayerInputButton.PrimaryAttack);
-            }
-            else
-            {
-                attackPressed = currentButtons.IsSet(PlayerInputButton.PrimaryAttack);
-            }
-        }
-
-        // Save previous buttons state even if combat is disabled or on cooldown,
-        // to prevent interpreting an old press when combat gets re-enabled.
-        PreviousButtons = currentButtons;
-
-        // Only State Authority decides and executes the authoritative attack strategy.
-        if (!HasStateAuthority)
-        {
-            return;
-        }
-
-        if (attackPressed && IsAttackEnabled && _character.IsAlive)
-        {
-            TryExecuteAttack(input);
+            TryExecuteAttack(_movementController.FacingDirection);
         }
     }
 
@@ -131,7 +102,6 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
             return;
         }
 
-        // Detect changes in the attack sequence to notify the local presentation layer
         if (AttackSequence != _lastObservedSequence)
         {
             AttackPerformedEvent performedEvent = new AttackPerformedEvent(
@@ -148,43 +118,23 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
     }
 
     /// <summary>
-    /// Attempts to execute the active attack, validating cooldown, direction, and strategy.
+    /// Attempts to execute the active attack, validating cooldown and strategy.
     /// </summary>
-    private void TryExecuteAttack(in PlayerNetworkInput input)
+    /// <param name="aimDirection">The direction to execute the attack towards.</param>
+    private void TryExecuteAttack(Vector2 aimDirection)
     {
         if (!AttackCooldown.ExpiredOrNotRunning(Runner))
         {
             return;
         }
 
-        if (_movementController == null)
+        if (aimDirection.sqrMagnitude < 0.0001f)
         {
-            return;
+            aimDirection = Vector2.down;
         }
 
+        Vector2 normalizedDirection = aimDirection.normalized;
         Vector2 originPos = _attackOrigin != null ? (Vector2)_attackOrigin.position : (Vector2)transform.position;
-        Vector2 direction;
-
-        if (_activeAttack != null && _activeAttack.Type == AttackType.Ranged)
-        {
-            direction = input.AimWorldPosition - originPos;
-            if (direction.sqrMagnitude < 0.0001f)
-            {
-                direction = _movementController.FacingDirection;
-            }
-        }
-        else
-        {
-            direction = _movementController.FacingDirection;
-        }
-
-        // Reject invalid directions with virtually zero magnitude
-        if (direction.sqrMagnitude < 0.0001f)
-        {
-            return;
-        }
-
-        Vector2 normalizedDirection = direction.normalized;
 
         AttackRequest request = new AttackRequest(
             _character.Id,
@@ -211,14 +161,13 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
             LastAttackDirection = request.Direction;
             LastAttackTypeValue = (int)_activeAttack.Type;
             LastAttackTick = request.SimulationTick;
-            
-            // Increment sequence last to ensure correct replication of all related fields
+
             AttackSequence++;
         }
     }
 
     /// <summary>
-    /// Authortatively changes the combat enabled state.
+    /// Authoritatively changes the combat enabled state.
     /// </summary>
     public bool TrySetAttackEnabled(bool enabled)
     {
@@ -232,7 +181,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
     }
 
     /// <summary>
-    /// Authortatively updates the active attack strategy. Requires State Authority.
+    /// Authoritatively updates the active attack strategy. Requires State Authority.
     /// </summary>
     public bool TrySetActiveAttack(MonoBehaviour attackSource)
     {
@@ -243,7 +192,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
 
         if (attackSource == null)
         {
-            Debug.LogError($"{nameof(PlayerCombatNetworkController)}: Cannot set active attack to null.", this);
+            Debug.LogError($"{nameof(EnemyCombatAIController)}: Cannot set active attack to null.", this);
             return false;
         }
 
@@ -254,7 +203,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
             return true;
         }
 
-        Debug.LogError($"{nameof(PlayerCombatNetworkController)}: The component {attackSource.name} does not implement {nameof(IAttack)}.", this);
+        Debug.LogError($"{nameof(EnemyCombatAIController)}: Component {attackSource.name} does not implement {nameof(IAttack)}.", this);
         return false;
     }
 
@@ -264,7 +213,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
         {
             _character = _characterSource as ICharacter;
         }
-
+        
         if (_character == null)
         {
             _character = GetComponent<ICharacter>() ?? GetComponentInParent<ICharacter>();
@@ -291,7 +240,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
 
         if (_movementController == null)
         {
-            _movementController = GetComponent<PlayerMovementNetworkController>();
+            _movementController = GetComponent<EnemyMovementAIController>();
         }
     }
 
@@ -299,25 +248,25 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
     {
         if (_character == null)
         {
-            Debug.LogError($"{nameof(PlayerCombatNetworkController)} requires a component implementing {nameof(ICharacter)}.", this);
+            Debug.LogError($"{nameof(EnemyCombatAIController)} requires a component implementing {nameof(ICharacter)}.", this);
             return false;
         }
 
         if (_attackOrigin == null)
         {
-            Debug.LogError($"{nameof(PlayerCombatNetworkController)} requires an assigned {nameof(_attackOrigin)} Transform.", this);
+            Debug.LogError($"{nameof(EnemyCombatAIController)} requires an assigned {nameof(_attackOrigin)} Transform.", this);
             return false;
         }
 
         if (_activeAttack == null)
         {
-            Debug.LogError($"{nameof(PlayerCombatNetworkController)} requires a component implementing {nameof(IAttack)}.", this);
+            Debug.LogError($"{nameof(EnemyCombatAIController)} requires a component implementing {nameof(IAttack)}.", this);
             return false;
         }
 
         if (_movementController == null)
         {
-            Debug.LogError($"{nameof(PlayerCombatNetworkController)} requires an assigned {nameof(PlayerMovementNetworkController)}.", this);
+            Debug.LogError($"{nameof(EnemyCombatAIController)} requires an assigned {nameof(EnemyMovementAIController)}.", this);
             return false;
         }
 
@@ -334,7 +283,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
 
         if (_movementController == null)
         {
-            _movementController = GetComponent<PlayerMovementNetworkController>();
+            _movementController = GetComponent<EnemyMovementAIController>();
         }
 
         if (_activeAttackSource == null)
