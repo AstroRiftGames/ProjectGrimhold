@@ -7,6 +7,11 @@ public readonly struct LootId : IEquatable<LootId>
 {
     public string Value { get; }
 
+    /// <summary>
+    /// Indicates whether this identifier contains a usable domain value.
+    /// </summary>
+    public bool IsValid => !string.IsNullOrWhiteSpace(Value);
+
     public LootId(string value)
     {
         if (string.IsNullOrWhiteSpace(value))

@@ -80,38 +80,59 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
             return InteractionResult.Rejected(InteractionFailureReason.TargetUnavailable);
         }
 
-        // 3. Resolve ILootReceiver using registry and interactorId
+        // Resolve the destination capability before reserving this consumable source.
         if (_registry == null || !_registry.TryGetLootReceiver(request.InteractorId, out var receiver) || receiver == null)
         {
-            return InteractionResult.Rejected(InteractionFailureReason.ReceiverNotFound);
+            return ToInteractionResult(
+                LootTransferResult.Rejected(LootTransferFailureReason.DestinationNotFound),
+                false);
         }
 
-        // 4. Temporarily mark pickup as consumed before granting loot
-        IsConsumed = true;
-
-        // 5. Build LootGrantRequest
-        var grantRequest = new LootGrantRequest(
+        var transferRequest = new LootTransferRequest(
             Id,
             request.InteractorId,
             _lootDefinition.LootId,
             _amount,
-            request.SimulationTick
-        );
+            request.SimulationTick);
 
-        // 6. Execute grant
-        var grantResult = receiver.TryGrantLoot(grantRequest);
+        // The pickup's reservation prevents two authoritative interactions from
+        // delivering the same consumable source while reception is validated.
+        IsConsumed = true;
+        LootTransferFailureReason failureReason = receiver.ValidateReceive(transferRequest);
 
-        // 7. Handle grant failure
-        if (!grantResult.Success)
+        if (failureReason != LootTransferFailureReason.None)
         {
-            IsConsumed = false; // Restore availability
-            return InteractionResult.Rejected(InteractionFailureReason.LootRejected);
+            IsConsumed = false;
+            return ToInteractionResult(LootTransferResult.Rejected(failureReason), false);
         }
 
-        // 8. Despawn on success
-        Runner.Despawn(Object);
+        // Commit cannot reject after successful prevalidation while State Authority
+        // retains control. Any inability to apply is an integration contract violation.
+        receiver.CommitReceive(transferRequest);
+        LootTransferResult transferResult = LootTransferResult.Succeeded(transferRequest);
 
-        // 9. Return success
-        return InteractionResult.Succeeded(true);
+        Runner.Despawn(Object);
+        return ToInteractionResult(transferResult, true);
+    }
+
+    private static InteractionResult ToInteractionResult(
+        in LootTransferResult transferResult,
+        bool isConsumed)
+    {
+        if (transferResult.Success)
+        {
+            return InteractionResult.Succeeded(isConsumed);
+        }
+
+        return transferResult.FailureReason switch
+        {
+            LootTransferFailureReason.MissingAuthority =>
+                InteractionResult.Rejected(InteractionFailureReason.MissingStateAuthority),
+            LootTransferFailureReason.DestinationNotFound =>
+                InteractionResult.Rejected(InteractionFailureReason.ReceiverNotFound),
+            LootTransferFailureReason.OutOfRange =>
+                InteractionResult.Rejected(InteractionFailureReason.OutOfRange),
+            _ => InteractionResult.Rejected(InteractionFailureReason.LootRejected)
+        };
     }
 }

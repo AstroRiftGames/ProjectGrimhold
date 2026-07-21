@@ -45,44 +45,20 @@ namespace Tests.EditMode.Loot
         }
 
         [Test]
-        public void LootGrantRequest_ConservesDataCorrectly()
-        {
-            var source = new EntityId(10);
-            var receiver = new EntityId(20);
-            var loot = new LootId("test_loot");
-            var request = new LootGrantRequest(source, receiver, loot, 5, 100);
-
-            Assert.AreEqual(source, request.SourceId);
-            Assert.AreEqual(receiver, request.ReceiverId);
-            Assert.AreEqual(loot, request.LootId);
-            Assert.AreEqual(5, request.Amount);
-            Assert.AreEqual(100, request.SimulationTick);
-        }
-
-        [Test]
-        public void LootReceiveResult_DifferentiatesAcceptanceAndRejection()
-        {
-            var success = LootReceiveResult.Accepted();
-            var failure = LootReceiveResult.Rejected(LootReceiveFailureReason.MissingStateAuthority);
-
-            Assert.IsTrue(success.Success);
-            Assert.AreEqual(LootReceiveFailureReason.None, success.FailureReason);
-
-            Assert.IsFalse(failure.Success);
-            Assert.AreEqual(LootReceiveFailureReason.MissingStateAuthority, failure.FailureReason);
-        }
-
-        [Test]
-        public void PlayerLootReceiver_WithoutSpawnedStateAuthorityRejectsGrant()
+        public void PlayerLootReceiver_WithoutSpawnedStateAuthorityRejectsPrevalidation()
         {
             var go = new GameObject();
             var receiver = go.AddComponent<PlayerLootReceiver>();
-            var request = new LootGrantRequest(new EntityId(1), receiver.Id, default(LootId), 5, 100);
+            var request = new LootTransferRequest(
+                new EntityId(1),
+                new EntityId(2),
+                new LootId("test_loot"),
+                5,
+                100);
 
-            var result = receiver.TryGrantLoot(request);
+            LootTransferFailureReason failureReason = receiver.ValidateReceive(request);
 
-            Assert.IsFalse(result.Success);
-            Assert.AreEqual(LootReceiveFailureReason.MissingStateAuthority, result.FailureReason);
+            Assert.AreEqual(LootTransferFailureReason.MissingAuthority, failureReason);
             UnityEngine.Object.DestroyImmediate(go);
         }
 
@@ -98,14 +74,23 @@ namespace Tests.EditMode.Loot
         {
             public EntityId Id { get; }
 
+            public int CommittedAmount { get; private set; }
+
             public StubLootReceiver(EntityId id)
             {
                 Id = id;
             }
 
-            public LootReceiveResult TryGrantLoot(in LootGrantRequest request)
+            public LootTransferFailureReason ValidateReceive(in LootTransferRequest request)
             {
-                return LootReceiveResult.Accepted();
+                return request.DestinationId == Id
+                    ? LootTransferFailureReason.None
+                    : LootTransferFailureReason.DestinationNotFound;
+            }
+
+            public void CommitReceive(in LootTransferRequest request)
+            {
+                CommittedAmount += request.RequestedAmount;
             }
         }
 

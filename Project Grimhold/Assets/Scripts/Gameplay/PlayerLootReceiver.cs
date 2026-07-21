@@ -9,7 +9,7 @@ using UnityEngine;
 /// read-only view to the owning player and other peers observing the player object.
 /// </summary>
 [DisallowMultipleComponent]
-public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver
+public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver, ILootContentReader, ILootQuantityReader
 {
     public const int MaxLootTypes = 64;
 
@@ -114,36 +114,52 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver
         }
     }
 
-    public LootReceiveResult TryGrantLoot(in LootGrantRequest request)
+    /// <summary>
+    /// Validates a complete loot reception without mutating replicated state.
+    /// State Authority must call <see cref="CommitReceive"/> immediately after a
+    /// successful validation and without allowing an intervening state change.
+    /// </summary>
+    public LootTransferFailureReason ValidateReceive(in LootTransferRequest request)
     {
         if (!HasStateAuthority)
         {
-            return LootReceiveResult.Rejected(LootReceiveFailureReason.MissingStateAuthority);
+            return LootTransferFailureReason.MissingAuthority;
         }
 
-        if (request.ReceiverId != Id)
+        if (request.SourceId.Value == 0)
         {
-            return LootReceiveResult.Rejected(LootReceiveFailureReason.ReceiverUnavailable);
+            return LootTransferFailureReason.SourceNotFound;
         }
 
-        if (string.IsNullOrWhiteSpace(request.LootId.Value))
+        if (request.DestinationId.Value == 0 || request.DestinationId != Id)
         {
-            return LootReceiveResult.Rejected(LootReceiveFailureReason.InvalidLootId);
+            return LootTransferFailureReason.DestinationNotFound;
         }
 
-        if (request.Amount <= 0)
+        if (!request.LootId.IsValid)
         {
-            return LootReceiveResult.Rejected(LootReceiveFailureReason.InvalidAmount);
+            return LootTransferFailureReason.InvalidLoot;
         }
 
-        if (_lootCatalog == null || !_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
+        if (request.RequestedAmount <= 0)
         {
-            return LootReceiveResult.Rejected(LootReceiveFailureReason.UnknownDefinition);
+            return LootTransferFailureReason.InvalidAmount;
+        }
+
+        if (_lootCatalog == null)
+        {
+            return LootTransferFailureReason.ContainerUnavailable;
+        }
+
+        if (!_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
+        {
+            return LootTransferFailureReason.InvalidLoot;
         }
 
         if (definitionIndex < 0 || definitionIndex >= MaxLootTypes)
         {
-            return LootReceiveResult.Rejected(LootReceiveFailureReason.InvalidNetworkRepresentation);
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: Loot index {definitionIndex} cannot be represented by the network inventory.", this);
+            return LootTransferFailureReason.ContainerUnavailable;
         }
 
         NetworkDictionary<int, int> inventory = LootInventory;
@@ -151,21 +167,48 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver
 
         if (!alreadyHeld && inventory.Count >= inventory.Capacity)
         {
-            // A valid catalog cannot reach this branch because its size is validated
-            // against MaxLootTypes before the receiver is registered.
-            return LootReceiveResult.Rejected(LootReceiveFailureReason.InvalidNetworkRepresentation);
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: Network inventory capacity was exhausted despite validated catalog configuration.", this);
+            return LootTransferFailureReason.ContainerUnavailable;
         }
 
-        if (currentAmount > int.MaxValue - request.Amount)
+        if (currentAmount > int.MaxValue - request.RequestedAmount)
         {
-            return LootReceiveResult.Rejected(LootReceiveFailureReason.Overflow);
+            return LootTransferFailureReason.Overflow;
         }
 
-        inventory.Set(definitionIndex, currentAmount + request.Amount);
+        return LootTransferFailureReason.None;
+    }
+
+    /// <summary>
+    /// Commits a previously validated complete reception.
+    /// An inability to apply the request indicates a caller or integration contract violation,
+    /// not a gameplay rejection.
+    /// </summary>
+    public void CommitReceive(in LootTransferRequest request)
+    {
+        if (_lootCatalog == null || !_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitReceive)} was called without a resolvable validated loot definition.", this);
+            return;
+        }
+
+        NetworkDictionary<int, int> inventory = LootInventory;
+        inventory.TryGet(definitionIndex, out int currentAmount);
+
+        if (definitionIndex < 0 || definitionIndex >= MaxLootTypes ||
+            request.RequestedAmount <= 0 ||
+            currentAmount > int.MaxValue - request.RequestedAmount ||
+            (!inventory.ContainsKey(definitionIndex) && inventory.Count >= inventory.Capacity))
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitReceive)} preconditions no longer hold. The caller violated the validate/commit contract.", this);
+            return;
+        }
+
+        inventory.Set(definitionIndex, currentAmount + request.RequestedAmount);
 
         LootChangeSequence++;
         LastGrantedDefinitionIndex = definitionIndex;
-        LastGrantedAmount = request.Amount;
+        LastGrantedAmount = request.RequestedAmount;
         LastGrantSourceIdValue = request.SourceId.Value;
         LastGrantTick = request.SimulationTick;
 
@@ -173,10 +216,8 @@ public sealed class PlayerLootReceiver : NetworkBehaviour, ILootReceiver
             LootChangeSequence,
             request.SourceId.Value,
             definitionIndex,
-            request.Amount,
+            request.RequestedAmount,
             request.SimulationTick);
-
-        return LootReceiveResult.Accepted();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]

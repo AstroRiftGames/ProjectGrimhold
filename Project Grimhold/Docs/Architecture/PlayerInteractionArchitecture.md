@@ -1,94 +1,100 @@
-# Arquitectura de Interacción del Jugador (Player Interaction Architecture)
+# Player Interaction Architecture
 
-Este documento define la arquitectura y el flujo del sistema de interacción en **Project Grimhold**.
+This document defines the architecture and data flow of the interaction system in **Project Grimhold**.
 
-El sistema de interacción permite a los personajes realizar acciones contextuales sobre objetos del mundo (como recoger loot de cofres o suelo, activar palancas, abrir puertas, etc.) de forma autoritativa en red y tolerante a la resimulación de Fusion.
+The system allows characters to perform contextual actions on world objects, such as collecting loot, activating mechanisms, and opening doors. Interaction is network-authoritative and safe under Fusion resimulation.
 
----
+## 1. Structure and data flow
 
-## 1. Estructura y Flujo de Datos
+The flow keeps these responsibilities separate:
 
-El flujo sigue el principio de separación estricta entre:
-1. **Captura de Entrada Local (Input Authority):** Detección de la tecla de interacción (`PlayerInputButton.Interact`) y empaquetado en `PlayerNetworkInput`.
-2. **Control de Simulación de Red (State Authority):** El controlador de red procesa y filtra la intención en `FixedUpdateNetwork`.
-3. **Resolución Lógica Pura (Independent):** El `InteractionResolver` estático y puro decide a qué candidato apuntar basándose en reglas espaciales y de prioridad.
-4. **Objetos Interactuables (`IInteractable`):** Implementaciones individuales de las reglas de negocio de cada objeto interactivo (ej. cofres, loot pickups).
-5. **Presentación Visual (Render):** Sincronización del estado de interacción mediante variables `[Networked]` para notificar a los presenters locales o remotos.
+1. **Local input capture (Input Authority):** `PlayerInputReader` detects `PlayerInputButton.Interact` and writes it into `PlayerNetworkInput`.
+2. **Input transport:** `FusionInputProvider` sends the input through Fusion.
+3. **Network simulation (State Authority):** `PlayerInteractionNetworkController.FixedUpdateNetwork` validates and processes the interaction intent.
+4. **Pure selection policy:** `InteractionResolver` selects a candidate from spatial and priority data.
+5. **Interactable behavior:** each `IInteractable` owns the business rules for its interaction.
+6. **Presentation:** confirmed results and local predictive candidates are published during `Render` for local presenters.
 
 ```text
-PlayerInputReader (Input Local)
-       │ (Interact Button Pressed)
-       ▼
-FusionInputProvider (Transporte de Input)
-       │
-       ▼
+PlayerInputReader (local input)
+       |
+       v
+FusionInputProvider (input transport)
+       |
+       v
 PlayerInteractionNetworkController.FixedUpdateNetwork (State Authority)
-       │
-       ├───► Detección de candidatos (IInteractionTargetQuery / Physics2D)
-       ├───► Resolución lógica estática (InteractionResolver)
-       │        ├───► Comprueba distancias y exclusiones
-       │        └───► Invoca IInteractable.Interact() autoritativamente
-       ▼
-[Networked] InteractionSequence ++ (Sincronización de Red)
-       │
-       ▼
-PlayerInteractionNetworkController.Render (Todos los Clientes)
-       └───► Invoca evento local InteractionResolved
+       |-- candidate query (IInteractionTargetQuery / Physics2D)
+       |-- selection policy (InteractionResolver)
+       |     |-- distance and exclusion checks
+       |     `-- authoritative IInteractable.Interact invocation
+       v
+[Networked] InteractionSequence increment
+       |
+       v
+PlayerInteractionNetworkController.Render
+       `-- local InteractionResolved notification
 ```
 
----
+## 2. Core components
 
-## 2. Componentes Clave
+### 2.1 `PlayerInteractionNetworkController`
 
-### 2.1 Controlador de Red (`PlayerInteractionNetworkController`)
-Responsable de coordinar la interacción en ticks de simulación:
-* Se ejecuta exclusivamente bajo **State Authority** en `FixedUpdateNetwork`.
-* Detecta pulsaciones del botón mediante el método `WasPressed` de Fusion (`input.Buttons.WasPressed(PreviousButtons, PlayerInputButton.Interact)`), lo cual garantiza que mantener presionado el botón no spamee interacciones.
-* Valida condiciones básicas del personaje (por ejemplo, si el jugador está vivo o si tiene habilitado el control de movimiento).
-* Utiliza una interfaz `IInteractionTargetQuery` para obtener candidatos en el espacio 2D.
-* Delega en `InteractionResolver` para validar y aplicar la interacción.
-* Mantiene propiedades de red (`[Networked]`) para sincronizar el último objetivo, resultado, tick y un contador de secuencia (`InteractionSequence`).
+The controller coordinates interaction during network simulation ticks:
 
-### 2.2 Consulta de Objetivos (`IInteractionTargetQuery`)
-Define cómo se encuentran los objetivos en el mundo:
-* **`Physics2DInteractionTargetQuery`**: Implementa esta interfaz usando `Physics2D.OverlapCircleNonAlloc` para evitar asignaciones de memoria (heap allocations) en la simulación caliente.
-* Filtra candidatos basándose en capas (`LayerMask`) y la distancia configurada.
+- It processes gameplay exclusively under State Authority in `FixedUpdateNetwork`.
+- It detects button edges with Fusion's `WasPressed` API so holding the button does not repeat interactions.
+- It validates the character's interaction eligibility.
+- It obtains spatial candidates through `IInteractionTargetQuery`.
+- It delegates candidate selection and interaction execution to `InteractionResolver`.
+- It records target, result, tick, and `InteractionSequence` in replicated state.
 
-### 2.3 Resolutor Lógico (`InteractionResolver`)
-Una clase puramente lógica y estática que contiene las reglas de selección de interacción:
-1. Excluye al propio personaje interactuante de los candidatos.
-2. Comprueba que las distancias reportadas sean válidas y estén dentro del rango permitido.
-3. Solicita la interfaz `IInteractable` del objetivo.
-4. Verifica si el objeto permite la interacción actualmente (`CanInteract`).
-5. Ejecuta la interacción autoritativa (`Interact`) sobre el primer candidato válido y detiene la búsqueda inmediatamente (garantía de interacción única).
+### 2.2 `IInteractionTargetQuery`
 
-### 2.4 Contratos e Interfaces
-* **`IInteractable`**: Interfaz base para cualquier entidad en el juego con la que se pueda interactuar.
-  * `bool CanInteract(in InteractionRequest request)`
-  * `InteractionResult Interact(in InteractionRequest request)`
-* **`InteractionRequest`**: Estructura de solo lectura que transporta el contexto (`InteractorId`, `TargetId`, `SimulationTick`).
-* **`InteractionResult`**: Estructura inmutable que indica si la interacción tuvo éxito, si el objeto fue consumido (destruido) y, en caso de fallo, la razón (`InteractionFailureReason`).
+This contract defines how candidates are found in the 2D world. `Physics2DInteractionTargetQuery` uses `Physics2D.OverlapCircleNonAlloc`, applies the configured layer mask and maximum distance, resolves entities through `EntityRegistry`, and avoids recurring allocations in the simulation loop.
 
----
+### 2.3 `InteractionResolver`
 
-## 3. Presentación local y resultados confirmados
+`InteractionResolver` contains the shared deterministic selection policy:
 
-`InteractionResolver.TrySelect` contiene la política compartida de selección sin ejecutar `Interact`. `LocalInteractionCandidateSource` la ejecuta durante `Render` únicamente para el jugador con Input Authority y expone un candidato local de solo lectura. El prompt es predictivo: no garantiza aceptación y no sincroniza textos ni recursos visuales.
+1. Exclude the interacting character.
+2. Reject invalid or out-of-range distance values.
+3. Resolve the target's `IInteractable` capability.
+4. Check `CanInteract`.
+5. Invoke `Interact` on the first valid candidate and stop immediately, guaranteeing a single interaction attempt.
 
-Cada pulsación procesada por State Authority incrementa `InteractionSequence`, incluso cuando el control está deshabilitado, el interactor no está disponible o no existe un target válido. El resultado conserva target, tick, éxito, consumo y `InteractionFailureReason`.
+`TrySelect` uses the same policy without executing `Interact`, allowing local predictive presentation to agree with authoritative selection.
 
-State Authority envía cada resultado mediante un RPC fiable dirigido al Input Authority. El handler sólo encola el payload; `PlayerInteractionNetworkController.Render` publica `InteractionResolved`. El presenter recuerda la última secuencia consumida, no reproduce el estado inicial y reinicia su deduplicador con el objeto del jugador de una sesión nueva.
+### 2.4 Contracts
 
-`LocalPlayerHudBinder` activa el HUD del prefab sólo cuando `HasInputAuthority`. Proxies, animaciones y vistas no ejecutan interacción ni modifican estado autoritativo.
+- `IInteractable` exposes `CanInteract(in InteractionRequest)` and `Interact(in InteractionRequest)`.
+- `InteractionRequest` is immutable and contains `InteractorId`, `TargetId`, and `SimulationTick`.
+- `InteractionResult` is immutable and contains success, consumption state, and `InteractionFailureReason`.
 
----
+## 3. Local presentation and confirmed results
 
-## 4. Integración con Loot (Pickups)
+`LocalInteractionCandidateSource` runs `InteractionResolver.TrySelect` during `Render` only for the player with Input Authority. It exposes a read-only local candidate for the predictive prompt. This prompt does not guarantee acceptance and does not synchronize text or visual resources.
 
-El sistema de pickups de loot (`NetworkLootPickup`) implementa `IInteractable` de la segregation de la siguiente manera:
-1. Al recibir `CanInteract`, comprueba que el pickup no esté marcado como consumido.
-2. Al recibir `Interact`, aplica una transacción de reserva estricta:
-   * Marca el pickup como consumido (`IsConsumed = true`).
-   * Solicita al receptor (`ILootReceiver`, usualmente `PlayerLootReceiver`) la entrega del loot.
-   * Si la entrega tiene éxito, devuelve `InteractionResult.Succeeded(isConsumed: true)` y se destruye de la simulación del Host mediante `Runner.Despawn(Object)`.
-   * Si falla, revierte `IsConsumed = false` y reporta el rechazo.
+Every interaction press processed by State Authority increments `InteractionSequence`, including disabled control, unavailable interactor, and missing-target failures. The result retains target, tick, success, consumption, and its typed failure reason.
+
+State Authority sends each result through a reliable RPC directed to Input Authority. The RPC handler only queues the payload; `PlayerInteractionNetworkController.Render` publishes `InteractionResolved`. The presenter deduplicates by sequence, ignores initial replicated state, and resets when bound to a player object from a new session.
+
+`LocalPlayerHudBinder` enables the prefab HUD only when `HasInputAuthority`. Proxies, animations, and views do not execute interactions or modify authoritative state.
+
+## 4. Loot pickup integration
+
+`NetworkLootPickup` implements `IInteractable` while preserving a strict reservation transaction:
+
+1. `CanInteract` verifies that the pickup is not consumed.
+2. `Interact` validates State Authority, the request, and availability.
+3. It resolves `ILootReceiver` and builds the unified `LootTransferRequest`.
+4. It reserves the pickup with `IsConsumed = true`.
+5. It calls `ValidateReceive` without mutating the destination.
+6. If prevalidation rejects, it restores `IsConsumed = false` and maps the precise loot reason to a general interaction result.
+7. If prevalidation succeeds, it calls `CommitReceive` immediately without yielding State Authority or allowing an intervening mutation.
+8. Only after the commit does it return `InteractionResult.Succeeded(isConsumed: true)` and despawn through `Runner.Despawn(Object)`.
+
+The pickup is a consumable source with its own reservation. It does not implement extraction and does not coordinate transfers between two storage endpoints.
+
+`LootTransferResult` preserves precise loot semantics, while `InteractionResult` reports the general interaction outcome. Missing authority, destination, and range map directly to interaction reasons; other loot failures map to `LootRejected` instead of expanding `InteractionFailureReason` with every transfer-specific case.
+
+This integration does not modify the directed RPC, presentation sequences, HUD, or `Render` publication flow.

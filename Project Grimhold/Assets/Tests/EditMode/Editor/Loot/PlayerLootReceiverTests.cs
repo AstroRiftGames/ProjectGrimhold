@@ -12,6 +12,7 @@ namespace Tests.EditMode.Loot
 
             Assert.That(entry.LootId, Is.EqualTo(lootId));
             Assert.That(entry.Amount, Is.EqualTo(12));
+            Assert.That(entry.IsValid, Is.True);
         }
 
         [Test]

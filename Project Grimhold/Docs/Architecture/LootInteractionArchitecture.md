@@ -1,66 +1,100 @@
-# Especificación de Contratos, Interfaces e Interacción de Loot
+# Loot Interaction and Transfer Architecture
 
-## 1. Identificador de Loot
+## 1. Identity, configuration, and stacks
 
-`LootId` es un identificador de valor de tipo struct inmutable, pequeño y comparable, adecuado para claves de diccionarios e independiente de ScriptableObjects y APIs de red:
+`LootId` is the stable, comparable domain identifier and is independent of Unity and Fusion. `LootDefinition` contains shared configuration only, while `LootDefinitionCatalog` is the local source of truth for resolving that configuration.
 
-```csharp
-public readonly struct LootId : IEquatable<LootId>
-{
-    public string Value { get; }
-    // ...
-}
+The catalog assigns deterministic indices by sorting IDs with ordinal comparison and supports `LootId ↔ index` resolution. Only indices and quantities are replicated; names, icons, rarity, and value are resolved locally.
+
+`LootEntry` is the only value object representing an aggregated stack. It contains a `LootId`, quantity, derived validity, and value equality. There is no parallel `LootStack` type.
+
+Until maximum stack sizes are introduced, gameplay slot occupancy is defined as:
+
+```text
+occupied slots = number of distinct LootIds with a positive quantity
 ```
 
-## 2. Definiciones de Loot y Catálogo de Datos
+- Increasing an existing ID does not consume another slot.
+- Adding a new ID requires a free slot.
+- There is no automatic splitting, weight capacity, or per-stack limit.
+- Numeric overflow is rejected.
 
-Para desacoplar los datos estáticos de la lógica runtime, el juego utiliza activos de configuración basados en `ScriptableObject`:
+The capacity of `64` on `PlayerLootReceiver.NetworkDictionary` is exclusively a Fusion representation limit. It does not represent gameplay slots or inventory capacity.
 
-* **`LootDefinition`**: Define los metadatos estáticos de un item de loot (ej. nombre, descripción, rareza de tipo `LootRarity`, categoría de tipo `LootCategory`, y peso o volumen).
-* **`LootDefinitionCatalog`**: Contiene la base de datos completa de todos los `LootDefinition` registrados en el proyecto. 
-  * Sirve como fuente de verdad única para validar identificadores de loot.
-  * Implementa métodos de validación (`OnValidate` en editor) para asegurar que no existan IDs duplicados o vacíos, evitando errores de configuración antes de compilar.
-  * Permite la búsqueda rápida de definiciones mediante `LootId`.
+## 2. Unified transfer model
 
-## 3. Contratos de Entrega
+All loot movement uses one vocabulary:
 
-La entrega de loot está desacoplada de la clase jugador mediante las siguientes abstracciones:
+- `LootTransferRequest`: source, destination, `LootId`, requested quantity, and simulation tick.
+- `LootTransferResult`: complete success or rejection, transferred quantity, and typed reason.
+- `LootTransferFailureReason`: stable domain reasons without Fusion, UI, or presentation details.
 
-- **`ILootReceiver`**: Contrato que implementa el receptor para recibir loot de forma transaccional.
-- **`LootGrantRequest`**: Contiene `SourceId`, `ReceiverId`, `LootId`, `Amount` y `SimulationTick`.
-- **`LootReceiveResult`**: Resultado tipado con factories `Accepted()` y `Rejected(reason)`.
+Requests and results are immutable. Success always represents the complete requested quantity and uses `None`. Rejection transfers zero and uses a reason other than `None`. Partial success cannot be represented.
 
-## 4. Transacción del Pickup
+A definition missing from the catalog maps to `InvalidLoot`. Fusion-specific index or technical-capacity failures are diagnosed at the integration boundary and exposed as `ContainerUnavailable`, never as full gameplay capacity.
 
-`NetworkLootPickup` (bajo State Authority) ejecuta una secuencia de reserva transaccional estricta:
+## 3. Segregated capabilities
 
-1. **Validación inicial**: Confirma que posee State Authority y que el pickup está disponible (`IsAvailable`).
-2. **Reserva**: Marca el pickup como consumido (`IsConsumed = true`) antes de entregar el loot para evitar colisiones multijugador concurrentes en redes con latencia.
-3. **Entrega**: Invoca al receptor (`TryGrantLoot`) exactamente una vez.
-4. **Validación de resultado**:
-   - Si la entrega falla o es rechazada, se restaura la disponibilidad (`IsConsumed = false`) y no se destruye el pickup.
-   - Si la entrega es aceptada, se destruye el objeto mediante `Runner.Despawn(Object)` de forma autoritativa.
+Entities implement only the capabilities they require:
 
-## 5. Almacenamiento y Sincronización
+- `ILootContentReader`: produces a complete read-only snapshot.
+- `ILootQuantityReader`: queries the aggregated quantity for a `LootId`.
+- `ILootSlotCapacityReader`: exposes gameplay capacity and occupancy.
+- `ILootReceiver`: prevalidates and commits reception.
+- `ILootExtractor`: prevalidates and commits extraction.
 
-`PlayerLootReceiver` mantiene la colección temporal de la incursión en una `NetworkDictionary<int, int>` asociada al objeto de red del jugador. State Authority es el único escritor. El propietario y los demás peers que observan el objeto consumen el mismo estado replicado por snapshots de Fusion.
+`PlayerLootReceiver` implements content reading, quantity queries, and reception. It does not yet implement extraction or configurable gameplay capacity. A pickup is not an inspectable container and does not implement reading, slots, or extraction.
 
-Las claves son índices deterministas generados por `LootDefinitionCatalog`, ordenando los IDs mediante comparación ordinal. Hosts y clientes deben utilizar el mismo catálogo. Sólo se sincronizan el índice y la cantidad; nombre, icono, rareza y valor se resuelven localmente.
+## 4. Prevalidation and commit protocol
 
-La colección tiene una capacidad técnica fija de 64 definiciones distintas debido al formato de `NetworkDictionary`. `PlayerLootReceiver` valida el tamaño completo del catálogo antes de registrarse, por lo que este límite no representa peso, slots ni una regla de capacidad durante gameplay.
+Reception and extraction explicitly separate two phases:
 
-Las cantidades son la fuente de verdad sincronizada. El valor total de extracción se deriva bajo demanda usando las definiciones del catálogo y no se replica como un segundo estado mutable.
+1. `ValidateReceive` or `ValidateExtraction` checks every endpoint precondition without mutating state and returns a typed reason.
+2. `CommitReceive` or `CommitExtraction` applies exactly the requested quantity without repeating gameplay validation or returning a rejection.
 
-## 6. Presentación provisional
+A commit may run only after prevalidation returns `None`, synchronously, and without State Authority yielding control or allowing an intervening mutation. If its internal preconditions no longer hold, the integration contract has been violated; this is not a normal gameplay rejection.
 
-`PlayerLootReceiver` incrementa `LootChangeSequence` después de cada mutación aceptada. La UI del propietario usa esa secuencia para refrescar la lista y el valor únicamente cuando cambia el estado replicado. Al vincularse, toma la secuencia actual como baseline y muestra el contenido inicial sin interpretarlo como una recogida nueva.
+TASK-30 does not implement an atomic runtime transfer between two storage endpoints. A later task must resolve both endpoints, validate authority, distance, and availability, exclude competing requests, prevalidate both sides, define commit order, and execute both commits without re-entry before producing the single `LootTransferResult`.
 
-Una entrega aceptada produce además un RPC fiable dirigido al Input Authority con secuencia, source, índice de definición, cantidad y tick. El receptor resuelve el índice mediante el catálogo local, encola un `LootGrantPresentationEvent` y lo publica desde `Render`. El toast se deduplica por secuencia; correcciones o cambios de snapshot actualizan el resumen pero no producen feedback de pickup.
+## 5. Authoritative pickup transaction
 
-La presentación consume `TryGetLootContent`, `TryCalculateTotalValue` y `TryResolveDefinition`. Si alguna definición no puede resolverse, el HUD muestra `Loot no disponible` y `Valor: —`; nunca presenta un total parcial como válido.
+`NetworkLootPickup` is a consumable source with its own reservation, not an extractable storage endpoint or a general coordinator. Under State Authority it:
 
-Nombres, iconos, colores, textos y valor derivado permanecen locales. El `Runner.Despawn` del pickup continúa siendo la única fuente de verdad para su desaparición; ningún presenter retrasa ni condiciona el consumo autoritativo.
+1. Validates interaction and availability.
+2. Resolves `ILootReceiver` through `EntityRegistry`.
+3. Builds a `LootTransferRequest`.
+4. Reserves the pickup with `IsConsumed = true`.
+5. Calls `ValidateReceive`.
+6. Restores the reservation and maps the result to `InteractionResult` when rejected.
+7. Calls `CommitReceive` immediately when accepted.
+8. Despawns the pickup only after the complete commit.
 
-## 7. Ciclo de Vida
+The reservation prevents two authoritative requests from delivering the same reward. The pickup does not know the player's internal implementation.
 
-La colección nace vacía con el `NetworkObject` del jugador, permanece durante su participación en la incursión y se elimina al despawnear ese objeto. `PlayerLootReceiver` sólo se registra como capacidad de recepción en el `EntityRegistry` de State Authority y elimina el registro en `Despawned`. Un runner nuevo crea un jugador y una colección nuevos; no existe persistencia hacia stash, equipamiento u otra sesión.
+Interaction retains a general-purpose result: missing authority, destination, and range map to their interaction equivalents, while other loot rejections map to `LootRejected`. `InteractionResult` and `LootTransferResult` remain separate.
+
+## 6. Temporary storage and authority
+
+`PlayerLootReceiver` stores the incursion collection in a `NetworkDictionary<int,int>` attached to the player's `NetworkObject`. State Authority is the only writer. Other peers consume replicated snapshots.
+
+`ValidateReceive` checks authority, IDs, loot, quantity, catalog resolution, representation, and overflow without mutating the collection. `CommitReceive` applies the complete prevalidated quantity, increments `LootChangeSequence`, and preserves the existing presentation integration.
+
+The collection registers as `ILootReceiver` in the State Authority runner's `EntityRegistry` and unregisters when the player despawns. Its state is created and destroyed with that object; there is no persistence to a stash, equipment, or another session.
+
+## 7. Presentation
+
+`LootChangeSequence`, the RPC directed to Input Authority, and `LootGrantPresentationEvent` remain integration and presentation responsibilities. Transfer contracts do not contain sequences, RPCs, text, icons, presenters, or visual references.
+
+The HUD continues to read snapshots through `TryGetLootContent`, derive value from the local catalog, and deduplicate notifications by sequence. `LootGrantPresentationEvent` remains specific to the current pickup delivery; generalizing it belongs to a later task when container-transfer presentation exists.
+
+## 8. Future work
+
+The following remain outside TASK-30:
+
+- Authoritative coordination between an extractable source and a receiving destination.
+- Resolution of new capabilities through `EntityRegistry`.
+- Runtime slot capacity.
+- Containers, chests, corpses, and inspection.
+- Container distance and availability validation.
+- Exclusion of concurrent transfers affecting the same stack.
+- Generalized presentation and Host/Client tests between storage endpoints.
