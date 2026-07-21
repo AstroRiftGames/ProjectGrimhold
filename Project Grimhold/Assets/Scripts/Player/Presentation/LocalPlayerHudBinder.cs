@@ -18,6 +18,9 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
     private LootHudPresenter _lootPresenter;
 
     [SerializeField]
+    private RaidInventoryPresenter _inventoryPresenter;
+
+    [SerializeField]
     private LocalInteractionCandidateSource _candidateSource;
 
     [SerializeField]
@@ -27,6 +30,7 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
     private PlayerLootReceiver _lootReceiver;
 
     private bool _isBound;
+    private LocalInputContext _inputContext;
 
     public override void Spawned()
     {
@@ -62,6 +66,7 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
         }
 
         if (_hudRoot == null || _interactionPresenter == null || _lootPresenter == null ||
+            _inventoryPresenter == null ||
             _candidateSource == null || _interactionController == null || _lootReceiver == null)
         {
             Debug.LogError($"{nameof(LocalPlayerHudBinder)} has missing HUD dependencies.", this);
@@ -73,6 +78,16 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
         _interactionPresenter.Bind(_candidateSource, _interactionController);
         _lootPresenter.Bind(_lootReceiver);
         _isBound = true;
+
+        _inputContext = Runner.GetComponent<LocalInputContext>();
+        if (_inputContext == null)
+        {
+            Debug.LogError($"{nameof(LocalPlayerHudBinder)} could not resolve {nameof(LocalInputContext)}.", this);
+            return;
+        }
+
+        _inputContext.ReaderChanged += OnInputReaderChanged;
+        OnInputReaderChanged(_inputContext.Reader);
     }
 
     private void UnbindLocalHud()
@@ -87,8 +102,33 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
             _lootPresenter.Unbind();
         }
 
+        if (_inputContext != null)
+        {
+            _inputContext.ReaderChanged -= OnInputReaderChanged;
+            _inputContext = null;
+        }
+
+        if (_inventoryPresenter != null)
+        {
+            _inventoryPresenter.Unbind();
+        }
+
         _isBound = false;
         SetHudActive(false);
+    }
+
+    private void OnInputReaderChanged(PlayerInputReader inputReader)
+    {
+        if (!_isBound || _inventoryPresenter == null)
+        {
+            return;
+        }
+
+        _inventoryPresenter.Unbind();
+        if (inputReader != null)
+        {
+            _inventoryPresenter.Bind(_lootReceiver, inputReader);
+        }
     }
 
     private void SetHudActive(bool active)

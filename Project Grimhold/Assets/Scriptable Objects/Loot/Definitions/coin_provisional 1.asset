@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LootDefinition
   _id: coin1
   _displayName: Coin (Provisional)
-  _icon: {fileID: 21300000, guid: d9603d1a18e123e4bb3ab0821057a68d, type: 3}
-  _worldSprite: {fileID: 21300000, guid: d9603d1a18e123e4bb3ab0821057a68d, type: 3}
+  _icon: {fileID: -5289736582898160604, guid: e93f4b6d668d41549987f993c5e31a7a, type: 3}
+  _worldSprite: {fileID: -5289736582898160604, guid: e93f4b6d668d41549987f993c5e31a7a, type: 3}
   _category: 1
   _rarity: 0
   _extractionValuePerUnit: 10

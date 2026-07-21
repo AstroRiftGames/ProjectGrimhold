@@ -89,7 +89,11 @@ The collection registers as `ILootReceiver` in the State Authority runner's `Ent
 
 `LootChangeSequence`, the RPC directed to Input Authority, and `LootGrantPresentationEvent` remain integration and presentation responsibilities. Transfer contracts do not contain sequences, RPCs, text, icons, presenters, or visual references.
 
-The HUD continues to read snapshots through `TryGetLootContent`, derive value from the local catalog, and observe both reception and extraction through `LootChangeSequence`. `LootGrantPresentationEvent` remains specific to the current pickup delivery; generalizing it belongs to a later task when container-transfer presentation exists.
+The local raid-inventory HUD reads snapshots through `TryGetLootContent`, capacity through `SlotCapacity`, derives value and visual metadata locally, and observes both reception and extraction through `LootChangeSequence`. It preserves the snapshot order and maintains a fixed visual slot pool without owning another inventory collection.
+
+`LootGrantPresentationEvent` remains specific to the current pickup delivery and continues to drive the transient pickup toast. Generalizing it belongs to a later task when container-transfer presentation exists.
+
+See `Docs/Architecture/RaidInventoryUIArchitecture.md` for the local binding, input suppression, lifecycle, slot projection, and future container-panel composition defined by TASK-32.
 
 ## 8. Future work
 

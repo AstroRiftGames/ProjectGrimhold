@@ -219,6 +219,34 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
                     ""isPartOfComposite"": false
                 }
             ]
+        },
+        {
+            ""name"": ""LocalUI"",
+            ""id"": ""513261a3-14ff-45c4-8202-e3efccfb739f"",
+            ""actions"": [
+                {
+                    ""name"": ""ToggleInventory"",
+                    ""type"": ""Button"",
+                    ""id"": ""a064622f-284c-47ba-911a-244393786a5f"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": ""Press(behavior=0)"",
+                    ""initialStateCheck"": false
+                }
+            ],
+            ""bindings"": [
+                {
+                    ""name"": """",
+                    ""id"": ""1fbcc587-88b8-43ba-a8c1-c90070333679"",
+                    ""path"": ""<Keyboard>/tab"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""ToggleInventory"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                }
+            ]
         }
     ],
     ""controlSchemes"": []
@@ -229,11 +257,15 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
         m_Gameplay_PrimaryAttack = m_Gameplay.FindAction("PrimaryAttack", throwIfNotFound: true);
         m_Gameplay_AimPosition = m_Gameplay.FindAction("AimPosition", throwIfNotFound: true);
         m_Gameplay_Interact = m_Gameplay.FindAction("Interact", throwIfNotFound: true);
+        // LocalUI
+        m_LocalUI = asset.FindActionMap("LocalUI", throwIfNotFound: true);
+        m_LocalUI_ToggleInventory = m_LocalUI.FindAction("ToggleInventory", throwIfNotFound: true);
     }
 
     ~@PlayerInputActions()
     {
         UnityEngine.Debug.Assert(!m_Gameplay.enabled, "This will cause a leak and performance issues, PlayerInputActions.Gameplay.Disable() has not been called.");
+        UnityEngine.Debug.Assert(!m_LocalUI.enabled, "This will cause a leak and performance issues, PlayerInputActions.LocalUI.Disable() has not been called.");
     }
 
     /// <summary>
@@ -434,6 +466,102 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
     /// Provides a new <see cref="GameplayActions" /> instance referencing this action map.
     /// </summary>
     public GameplayActions @Gameplay => new GameplayActions(this);
+
+    // LocalUI
+    private readonly InputActionMap m_LocalUI;
+    private List<ILocalUIActions> m_LocalUIActionsCallbackInterfaces = new List<ILocalUIActions>();
+    private readonly InputAction m_LocalUI_ToggleInventory;
+    /// <summary>
+    /// Provides access to input actions defined in input action map "LocalUI".
+    /// </summary>
+    public struct LocalUIActions
+    {
+        private @PlayerInputActions m_Wrapper;
+
+        /// <summary>
+        /// Construct a new instance of the input action map wrapper class.
+        /// </summary>
+        public LocalUIActions(@PlayerInputActions wrapper) { m_Wrapper = wrapper; }
+        /// <summary>
+        /// Provides access to the underlying input action "LocalUI/ToggleInventory".
+        /// </summary>
+        public InputAction @ToggleInventory => m_Wrapper.m_LocalUI_ToggleInventory;
+        /// <summary>
+        /// Provides access to the underlying input action map instance.
+        /// </summary>
+        public InputActionMap Get() { return m_Wrapper.m_LocalUI; }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Enable()" />
+        public void Enable() { Get().Enable(); }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Disable()" />
+        public void Disable() { Get().Disable(); }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.enabled" />
+        public bool enabled => Get().enabled;
+        /// <summary>
+        /// Implicitly converts an <see ref="LocalUIActions" /> to an <see ref="InputActionMap" /> instance.
+        /// </summary>
+        public static implicit operator InputActionMap(LocalUIActions set) { return set.Get(); }
+        /// <summary>
+        /// Adds <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
+        /// </summary>
+        /// <param name="instance">Callback instance.</param>
+        /// <remarks>
+        /// If <paramref name="instance" /> is <c>null</c> or <paramref name="instance"/> have already been added this method does nothing.
+        /// </remarks>
+        /// <seealso cref="LocalUIActions" />
+        public void AddCallbacks(ILocalUIActions instance)
+        {
+            if (instance == null || m_Wrapper.m_LocalUIActionsCallbackInterfaces.Contains(instance)) return;
+            m_Wrapper.m_LocalUIActionsCallbackInterfaces.Add(instance);
+            @ToggleInventory.started += instance.OnToggleInventory;
+            @ToggleInventory.performed += instance.OnToggleInventory;
+            @ToggleInventory.canceled += instance.OnToggleInventory;
+        }
+
+        /// <summary>
+        /// Removes <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
+        /// </summary>
+        /// <remarks>
+        /// Calling this method when <paramref name="instance" /> have not previously been registered has no side-effects.
+        /// </remarks>
+        /// <seealso cref="LocalUIActions" />
+        private void UnregisterCallbacks(ILocalUIActions instance)
+        {
+            @ToggleInventory.started -= instance.OnToggleInventory;
+            @ToggleInventory.performed -= instance.OnToggleInventory;
+            @ToggleInventory.canceled -= instance.OnToggleInventory;
+        }
+
+        /// <summary>
+        /// Unregisters <param cref="instance" /> and unregisters all input action callbacks via <see cref="LocalUIActions.UnregisterCallbacks(ILocalUIActions)" />.
+        /// </summary>
+        /// <seealso cref="LocalUIActions.UnregisterCallbacks(ILocalUIActions)" />
+        public void RemoveCallbacks(ILocalUIActions instance)
+        {
+            if (m_Wrapper.m_LocalUIActionsCallbackInterfaces.Remove(instance))
+                UnregisterCallbacks(instance);
+        }
+
+        /// <summary>
+        /// Replaces all existing callback instances and previously registered input action callbacks associated with them with callbacks provided via <param cref="instance" />.
+        /// </summary>
+        /// <remarks>
+        /// If <paramref name="instance" /> is <c>null</c>, calling this method will only unregister all existing callbacks but not register any new callbacks.
+        /// </remarks>
+        /// <seealso cref="LocalUIActions.AddCallbacks(ILocalUIActions)" />
+        /// <seealso cref="LocalUIActions.RemoveCallbacks(ILocalUIActions)" />
+        /// <seealso cref="LocalUIActions.UnregisterCallbacks(ILocalUIActions)" />
+        public void SetCallbacks(ILocalUIActions instance)
+        {
+            foreach (var item in m_Wrapper.m_LocalUIActionsCallbackInterfaces)
+                UnregisterCallbacks(item);
+            m_Wrapper.m_LocalUIActionsCallbackInterfaces.Clear();
+            AddCallbacks(instance);
+        }
+    }
+    /// <summary>
+    /// Provides a new <see cref="LocalUIActions" /> instance referencing this action map.
+    /// </summary>
+    public LocalUIActions @LocalUI => new LocalUIActions(this);
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "Gameplay" which allows adding and removing callbacks.
     /// </summary>
@@ -469,5 +597,20 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnInteract(InputAction.CallbackContext context);
+    }
+    /// <summary>
+    /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "LocalUI" which allows adding and removing callbacks.
+    /// </summary>
+    /// <seealso cref="LocalUIActions.AddCallbacks(ILocalUIActions)" />
+    /// <seealso cref="LocalUIActions.RemoveCallbacks(ILocalUIActions)" />
+    public interface ILocalUIActions
+    {
+        /// <summary>
+        /// Method invoked when associated input action "ToggleInventory" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnToggleInventory(InputAction.CallbackContext context);
     }
 }

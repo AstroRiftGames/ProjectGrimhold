@@ -98,12 +98,6 @@ public sealed class LootDefinition : ScriptableObject
             return false;
         }
 
-        if (_icon == null)
-        {
-            error = $"Loot definition '{_id}' lacks a valid Icon reference.";
-            return false;
-        }
-
         if (_worldSprite == null)
         {
             error = $"Loot definition '{_id}' lacks a valid World Sprite reference.";

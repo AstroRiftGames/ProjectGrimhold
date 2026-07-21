@@ -154,13 +154,13 @@ namespace Tests.EditMode.Loot
         }
 
         [Test]
-        public void NullIcon_FailsValidation()
+        public void NullIcon_PassesValidationForPresentationFallback()
         {
             SetValidDefaults();
             SetField("_icon", null);
             bool result = _loot.TryValidate(out string error);
-            Assert.That(result, Is.False);
-            Assert.That(error, Does.Contain("lacks a valid Icon reference"));
+            Assert.That(result, Is.True, error);
+            Assert.That(error, Is.Null);
         }
 
         [Test]

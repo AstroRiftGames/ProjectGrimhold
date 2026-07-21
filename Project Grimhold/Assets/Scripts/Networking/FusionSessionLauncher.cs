@@ -65,6 +65,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
             _runnerObject = new GameObject("NetworkRunner");
             _runner = _runnerObject.AddComponent<NetworkRunner>();
             _runnerObject.AddComponent<EntityRegistry>();
+            _runnerObject.AddComponent<LocalInputContext>();
 
             // 1. Create and associate the NetworkSpawnManager with the runner before callbacks/StartGame
             _spawnManager = _runnerObject.AddComponent<NetworkSpawnManager>();

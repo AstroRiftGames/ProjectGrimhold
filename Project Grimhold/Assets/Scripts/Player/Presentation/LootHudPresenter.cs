@@ -1,22 +1,13 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
 using TMPro;
 using UnityEngine;
 
 /// <summary>
-/// Presents the local player's replicated incursion loot as a read-only list,
-/// derived total value, and deduplicated delivery feedback.
+/// Presents deduplicated local feedback for confirmed pickup deliveries.
+/// The raid-inventory screen owns persistent content presentation.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class LootHudPresenter : MonoBehaviour
 {
-    [SerializeField]
-    private TMP_Text _contentText;
-
-    [SerializeField]
-    private TMP_Text _totalValueText;
-
     [SerializeField]
     private GameObject _toastRoot;
 
@@ -26,13 +17,10 @@ public sealed class LootHudPresenter : MonoBehaviour
     [SerializeField, Min(0f)]
     private float _toastDuration = 1.5f;
 
-    private readonly StringBuilder _contentBuilder = new(128);
     private PlayerLootReceiver _lootReceiver;
-    private int _observedChangeSequence;
     private int _lastGrantSequence;
     private float _toastRemaining;
     private bool _isBound;
-    private bool _reportedReadFailure;
 
     public void Bind(PlayerLootReceiver lootReceiver)
     {
@@ -41,15 +29,12 @@ public sealed class LootHudPresenter : MonoBehaviour
         _lootReceiver = lootReceiver;
         if (_lootReceiver == null)
         {
-            ShowUnavailable();
             return;
         }
 
-        _observedChangeSequence = _lootReceiver.LootChangeSequence;
-        _lastGrantSequence = _observedChangeSequence;
+        _lastGrantSequence = _lootReceiver.LootChangeSequence;
         _lootReceiver.LootGranted += OnLootGranted;
         _isBound = true;
-        RefreshSummary();
     }
 
     public void Unbind()
@@ -61,25 +46,12 @@ public sealed class LootHudPresenter : MonoBehaviour
 
         _lootReceiver = null;
         _isBound = false;
-        _reportedReadFailure = false;
         HideToast();
     }
 
     private void Update()
     {
-        if (!_isBound || _lootReceiver == null)
-        {
-            return;
-        }
-
-        int currentSequence = _lootReceiver.LootChangeSequence;
-        if (currentSequence != _observedChangeSequence)
-        {
-            _observedChangeSequence = currentSequence;
-            RefreshSummary();
-        }
-
-        if (_toastRemaining <= 0f)
+        if (!_isBound || _toastRemaining <= 0f)
         {
             return;
         }
@@ -106,7 +78,7 @@ public sealed class LootHudPresenter : MonoBehaviour
         _lastGrantSequence = grantEvent.Sequence;
         if (!_lootReceiver.TryResolveDefinition(grantEvent.LootId, out LootDefinition definition))
         {
-            ReportReadFailure();
+            Debug.LogError($"{nameof(LootHudPresenter)} could not resolve loot grant metadata.", this);
             return;
         }
 
@@ -122,86 +94,6 @@ public sealed class LootHudPresenter : MonoBehaviour
         }
 
         _toastRemaining = _toastDuration;
-    }
-
-    private void RefreshSummary()
-    {
-        if (!_lootReceiver.TryGetLootContent(out IReadOnlyList<LootEntry> content) ||
-            !_lootReceiver.TryCalculateTotalValue(out long totalValue))
-        {
-            ShowUnavailable();
-            ReportReadFailure();
-            return;
-        }
-
-        _reportedReadFailure = false;
-        _contentBuilder.Clear();
-
-        if (content.Count == 0)
-        {
-            _contentBuilder.Append("Loot: vacío");
-        }
-        else
-        {
-            long totalUnits = 0;
-            _contentBuilder.Append("Loot transportado");
-
-            for (int i = 0; i < content.Count; i++)
-            {
-                LootEntry entry = content[i];
-                if (!_lootReceiver.TryResolveDefinition(entry.LootId, out LootDefinition definition))
-                {
-                    ShowUnavailable();
-                    ReportReadFailure();
-                    return;
-                }
-
-                totalUnits += entry.Amount;
-                _contentBuilder.Append('\n');
-                _contentBuilder.Append(definition.DisplayName);
-                _contentBuilder.Append(" × ");
-                _contentBuilder.Append(entry.Amount);
-            }
-
-            _contentBuilder.Append("\nTipos: ");
-            _contentBuilder.Append(content.Count);
-            _contentBuilder.Append("  Unidades: ");
-            _contentBuilder.Append(totalUnits);
-        }
-
-        if (_contentText != null)
-        {
-            _contentText.text = _contentBuilder.ToString();
-        }
-
-        if (_totalValueText != null)
-        {
-            _totalValueText.text = $"Valor: {totalValue}";
-        }
-    }
-
-    private void ShowUnavailable()
-    {
-        if (_contentText != null)
-        {
-            _contentText.text = "Loot no disponible";
-        }
-
-        if (_totalValueText != null)
-        {
-            _totalValueText.text = "Valor: —";
-        }
-    }
-
-    private void ReportReadFailure()
-    {
-        if (_reportedReadFailure)
-        {
-            return;
-        }
-
-        _reportedReadFailure = true;
-        Debug.LogError($"{nameof(LootHudPresenter)} could not resolve the complete local loot presentation.", this);
     }
 
     private void HideToast()
