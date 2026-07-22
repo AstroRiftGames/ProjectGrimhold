@@ -1,107 +1,77 @@
 # Loot Interaction and Transfer Architecture
 
-## 1. Identity, configuration, and stacks
+## Context and decision
 
-`LootId` is the stable, comparable domain identifier and is independent of Unity and Fusion. `LootDefinition` contains shared configuration only, while `LootDefinitionCatalog` is the local source of truth for resolving that configuration.
+Loot movement uses `LootEntry` as its only runtime stack and `LootId` as its domain identity. `LootDefinitionCatalog` assigns deterministic indices by ordinal ID order. Fusion transports and replicates catalog indices and quantities; every peer resolves static names, icons, rarity and value locally.
 
-The catalog assigns deterministic indices by sorting IDs with ordinal comparison and supports `LootId ↔ index` resolution. Only indices and quantities are replicated; names, icons, rarity, and value are resolved locally.
+TASK-33 adds a reusable synchronized source and an authoritative full-stack transfer adapter. It deliberately adds no container UI, `IInteractable`, partial transfers, global coordinator, static service, networked mailbox or networked request cache.
 
-`LootEntry` is the only value object representing an aggregated stack. It contains a `LootId`, quantity, derived validity, and value equality. There is no parallel `LootStack` type.
+## Components and responsibilities
 
-Until maximum stack sizes are introduced, gameplay slot occupancy is defined as:
+- `NetworkLootContainer` owns replicated container contents, initialization, runtime availability and change sequence. It implements `ILootExtractor`, `ILootQuantityReader`, `ILootContentReader` and `ILootSlotCapacityReader`, but not `ILootReceiver` or `IInteractable`.
+- `PlayerLootReceiver` remains the only temporary player inventory. Its validators own expected gameplay rejection; its commits apply a previously validated request.
+- `LootTransferTransaction` performs `ValidateExtraction -> ValidateReceive -> CommitExtraction -> CommitReceive` synchronously. It performs no entity resolution, catalog lookup, range calculation or presentation.
+- `PlayerLootTransferNetworkController` is the Fusion integration boundary on the player object. Input Authority sends an intention; State Authority derives requester, destination, full quantity, range and tick, then executes the transaction.
+- `EntityRegistry` remains runner-scoped. A grouped loot-source registration atomically publishes extractor, quantity reader and associated colliders.
+- `LootContainerTransferDebugHarness` is separate development tooling. It is not attached to production player prefabs or scenes.
+
+## Sources of truth and network authority
+
+The container replicates only:
 
 ```text
-occupied slots = number of distinct LootIds with a positive quantity
+NetworkDictionary<catalog index, quantity>
+IsInitialized
+IsAvailable
+LootChangeSequence
 ```
 
-- Increasing an existing ID does not consume another slot.
-- Adding a new ID requires a free slot.
-- There is no automatic splitting, weight capacity, or per-stack limit.
-- Numeric overflow is rejected.
+`IsEmpty` and occupied slots are derived. Initial configuration is fully validated before any stack is written and is then loaded in catalog-index order. State Authority registers the initialized source. If grouped registration fails, no partial registry entries remain; valid contents and `IsInitialized` are preserved while `IsAvailable` stays false.
 
-The capacity of `64` on `PlayerLootReceiver.NetworkDictionary` is exclusively a Fusion representation limit. It does not represent gameplay slots or inventory capacity.
+`SetAvailability(bool)` requires State Authority. Enabling requires successful initialization and registration. Repeating a value is idempotent. Availability changes neither contents, registration, despawn state nor `LootChangeSequence`. `ValidateExtraction` returns `ContainerUnavailable` when the source cannot participate.
 
-## 2. Unified transfer model
+## Prevalidation and commit invariant
 
-All loot movement uses one vocabulary:
+Expected failures, including missing authority, invalid loot or amount, insufficient quantity, capacity, overflow and unavailable containers, are returned by endpoint validators. After both validators return `None`, the two commits must apply the exact request.
 
-- `LootTransferRequest`: source, destination, `LootId`, requested quantity, and simulation tick.
-- `LootTransferResult`: complete success or rejection, transferred quantity, and typed reason.
-- `LootTransferFailureReason`: stable domain reasons without Fusion, UI, or presentation details.
+Commits do not return rejections and do not silently skip mutation. Defensive structural checks diagnose an impossible integration state with a contextual error and exception. Because each commit verifies its structural contract before changing its own collection and the transaction runs synchronously without yielding or callbacks, a violated contract stops execution instead of allowing the destination commit to continue after an omitted extraction.
 
-Requests and results are immutable. Success always represents the complete requested quantity and uses `None`. Rejection transfers zero and uses a reason other than `None`. Partial success cannot be represented.
+## Transport and local request lifecycle
 
-A definition missing from the catalog maps to `InvalidLoot`. Fusion-specific index or technical-capacity failures are diagnosed at the integration boundary and exposed as `ContainerUnavailable`, never as full gameplay capacity.
+Domain structs are never sent as RPC parameters. The request RPC contains only:
 
-## 3. Segregated capabilities
+```text
+source EntityId value
+catalog index
+request sequence
+```
 
-Entities implement only the capabilities they require:
+Input Authority permits one legitimate request in flight. A locally rejected second request neither sends an RPC nor advances sequence. Matching confirmation or transport rejection releases it; despawn/session restart clears it.
 
-- `ILootContentReader`: produces a complete read-only snapshot.
-- `ILootQuantityReader`: queries the aggregated quantity for a `LootId`.
-- `ILootSlotCapacityReader`: exposes gameplay capacity and occupancy.
-- `ILootReceiver`: prevalidates and commits reception.
-- `ILootExtractor`: prevalidates and commits extraction.
+State Authority stores one local, non-networked pending identity and never overwrites it. It distinguishes an exact pending duplicate, conflicting payload with the same sequence, a different sequence while busy, an exact duplicate of the last processed request, and stale input. Pending is consumed only by `FixedUpdateNetwork`. Only the last processed identity and confirmation are cached; an exact processed duplicate resends that confirmation without executing gameplay.
 
-`PlayerLootReceiver` implements content reading, quantity queries, gameplay slot capacity, reception, and extraction. A pickup is not an inspectable container and does not implement reading, slots, or extraction.
+The confirmation RPC contains only sequence, source/destination integer IDs, catalog index, transferred amount, success, failure reason integer and simulation tick. Input Authority first verifies sequence, then releases matching in-flight state before validating the rest of the envelope. A malformed matching payload is diagnosed without blocking later requests. An unknown sequence releases nothing and publishes no gameplay.
 
-## 4. Prevalidation and commit protocol
+`LootTransferConfirmation` belongs to the adapter layer. It always preserves primitive identity, index, tick and `LootTransferResult`; resolved `LootId` metadata is optional. Success requires positive amount, `None` and a resolvable catalog entry. A valid rejection such as `InvalidLoot` can be published without local metadata.
 
-Reception and extraction explicitly separate two phases:
+## Range and competition
 
-1. `ValidateReceive` or `ValidateExtraction` checks every endpoint precondition without mutating state and returns a typed reason.
-2. `CommitReceive` or `CommitExtraction` applies exactly the requested quantity without repeating gameplay validation or returning a rejection.
+For every consumed pending request, State Authority reruns `Physics2DInteractionTargetQuery` against registry colliders using the player's authoritative origin and interaction configuration. It never trusts client position, amount, destination or an earlier target selection.
 
-A commit may run only after prevalidation returns `None`, synchronously, and without State Authority yielding control or allowing an intervening mutation. If its internal preconditions no longer hold, the integration contract has been violated; this is not a normal gameplay rejection.
+Fusion simulation processes authoritative requests serially. The first complete transfer removes the source stack before a later competing player validates, so the later request observes insufficient quantity rather than duplicating loot.
 
-TASK-31 still does not implement an atomic runtime transfer between two storage endpoints. A later task must resolve both endpoints, validate authority, distance, and availability, exclude competing requests, prevalidate both sides, define commit order, and execute both commits without re-entry before producing the single `LootTransferResult`.
+## Pickup presentation boundary
 
-## 5. Authoritative pickup transaction
+`CommitReceive` is generic and emits no pickup toast. `ILootPickupFeedbackSink` is an optional integration boundary implemented by `PlayerLootReceiver`. `NetworkLootPickup` invokes it only after a successful pickup commit. Its presentation RPC uses primitive values and reconstructs `LootGrantPresentationEvent` locally. Container transfers never consult this sink.
 
-`NetworkLootPickup` is a consumable source with its own reservation, not an extractable storage endpoint or a general coordinator. Under State Authority it:
+## Prefabs and development validation
 
-1. Validates interaction and availability.
-2. Resolves `ILootReceiver` through `EntityRegistry`.
-3. Builds a `LootTransferRequest`.
-4. Reserves the pickup with `IsConsumed = true`.
-5. Calls `ValidateReceive`.
-6. Restores the reservation and maps the result to `InteractionResult` when rejected.
-7. Calls `CommitReceive` immediately when accepted.
-8. Despawns the pickup only after the complete commit.
+`NetworkPlayer.prefab` contains `PlayerLootTransferNetworkController` and no debug component. `LootContainer.prefab` contains `NetworkObject`, `NetworkLootContainer`, a layer-8 collider and a presentation-only provisional visual. Initial stacks remain Inspector configuration.
 
-The reservation prevents two authoritative requests from delivering the same reward. The pickup does not know the player's internal implementation.
+`Assets/Prefabs/Debug/LootContainerTransferDebugHarness.prefab` can be placed manually in a graybox. In Editor or Development Build it resolves the local player through `TryGetPlayerObject`, detects nearby containers directly from colliders, reads their snapshot and invokes the public or raw debug transport methods. F8 sends the public full-stack request; F9 repeats its exact envelope; F10 reuses its sequence with a conflicting catalog index; F11 sends a different sequence while the legitimate request is in flight; and F12 queues an availability toggle that only succeeds on the peer holding State Authority and is applied by the container in `FixedUpdateNetwork`. Press F8 together with F9, F10 or F11 to guarantee both envelopes arrive before the next simulation tick. In a non-development release the class remains loadable but disables itself and performs no input or searches.
 
-Interaction retains a general-purpose result: missing authority, destination, and range map to their interaction equivalents, while other loot rejections map to `LootRejected`. `InteractionResult` and `LootTransferResult` remain separate.
+## Risks and validation
 
-## 6. Temporary storage and authority
+Catalogs must be identical across peers because transport indices are catalog-local. Invalid success envelopes are rejected at the transport boundary. Registry conflicts leave containers initialized but intentionally unavailable and must be fixed as configuration/integration errors.
 
-`PlayerLootReceiver` stores the incursion collection in a `NetworkDictionary<int,int>` attached to the player's `NetworkObject`. State Authority is the only writer. Other peers consume replicated snapshots.
-
-Gameplay capacity is a positive serialized value on the component, configured to 16 slots on the base network-player prefab and limited to the dictionary's technical maximum. It is not networked and is not derived from the dictionary capacity. `SlotCapacity` exposes that configuration, while `OccupiedSlotCount` is derived from the number of stored keys. Commits preserve the invariant that every stored quantity is positive.
-
-`ValidateReceive` checks authority, IDs, loot, quantity, catalog resolution, representation, overflow, and gameplay capacity without mutating the collection. Existing IDs stack without consuming another slot. A new ID is rejected with `InventoryFull` only when all configured gameplay slots are occupied. `CommitReceive` applies the complete prevalidated quantity, increments `LootChangeSequence`, and preserves the existing presentation integration.
-
-`ValidateExtraction` checks authority, endpoint identities, loot, quantity, catalog resolution, representation, and complete availability without mutation. `CommitExtraction` subtracts the complete prevalidated quantity, removes the key when its amount reaches zero, and increments `LootChangeSequence`. Extraction does not resolve or modify the destination and does not emit a grant presentation event.
-
-The collection registers as `ILootReceiver` in the State Authority runner's `EntityRegistry` and unregisters when the player despawns. Its state is created and destroyed with that object; there is no persistence to a stash, equipment, or another session.
-
-## 7. Presentation
-
-`LootChangeSequence`, the RPC directed to Input Authority, and `LootGrantPresentationEvent` remain integration and presentation responsibilities. Transfer contracts do not contain sequences, RPCs, text, icons, presenters, or visual references.
-
-The local raid-inventory HUD reads snapshots through `TryGetLootContent`, capacity through `SlotCapacity`, derives value and visual metadata locally, and observes both reception and extraction through `LootChangeSequence`. It preserves the snapshot order and maintains a fixed visual slot pool without owning another inventory collection.
-
-`LootGrantPresentationEvent` remains specific to the current pickup delivery and continues to drive the transient pickup toast. Generalizing it belongs to a later task when container-transfer presentation exists.
-
-See `Docs/Architecture/RaidInventoryUIArchitecture.md` for the local binding, input suppression, lifecycle, slot projection, and future container-panel composition defined by TASK-32.
-
-## 8. Future work
-
-The following remain outside TASK-31:
-
-- Authoritative coordination between an extractable source and a receiving destination.
-- Resolution of new capabilities through `EntityRegistry`.
-- Containers, chests, corpses, and inspection.
-- Container distance and availability validation.
-- Exclusion of concurrent transfers affecting the same stack.
-- Generalized presentation and Host/Client tests between storage endpoints.
+Automated coverage targets initialization rules, registry atomicity, transaction order, queue/idempotency semantics and prefab composition. Host/Client placement, range, capacity, competition, availability, feedback and session cleanup still require the manual development harness flow.

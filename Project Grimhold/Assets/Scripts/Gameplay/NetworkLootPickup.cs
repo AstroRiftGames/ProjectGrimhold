@@ -109,6 +109,10 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
         // Commit cannot reject after successful prevalidation while State Authority
         // retains control. Any inability to apply is an integration contract violation.
         receiver.CommitReceive(transferRequest);
+        if (receiver is ILootPickupFeedbackSink feedbackSink)
+        {
+            feedbackSink.PublishPickupGrant(transferRequest);
+        }
         LootTransferResult transferResult = LootTransferResult.Succeeded(transferRequest);
 
         Runner.Despawn(Object);

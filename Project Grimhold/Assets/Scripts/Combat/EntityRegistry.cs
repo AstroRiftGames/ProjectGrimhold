@@ -12,7 +12,25 @@ public sealed class EntityRegistry : MonoBehaviour
     private readonly Dictionary<EntityId, IDamageable> _entities = new();
     private readonly Dictionary<EntityId, IInteractable> _interactables = new();
     private readonly Dictionary<EntityId, ILootReceiver> _lootReceivers = new();
+    private readonly Dictionary<EntityId, LootSourceRegistration> _lootSources = new();
     private readonly Dictionary<Collider2D, EntityId> _colliders = new();
+
+    private readonly struct LootSourceRegistration
+    {
+        public ILootExtractor Extractor { get; }
+        public ILootQuantityReader QuantityReader { get; }
+        public Collider2D[] Colliders { get; }
+
+        public LootSourceRegistration(
+            ILootExtractor extractor,
+            ILootQuantityReader quantityReader,
+            Collider2D[] colliders)
+        {
+            Extractor = extractor;
+            QuantityReader = quantityReader;
+            Colliders = colliders;
+        }
+    }
 
     /// <summary>
     /// Attempts to register an entity and its associated colliders.
@@ -221,6 +239,101 @@ public sealed class EntityRegistry : MonoBehaviour
             }
         }
 
+        return false;
+    }
+
+    /// <summary>
+    /// Atomically registers a loot source's extraction, quantity and collider capabilities.
+    /// All conflicts are checked before any registry map is changed.
+    /// </summary>
+    public bool TryRegisterLootSource(
+        EntityId id,
+        ILootExtractor extractor,
+        ILootQuantityReader quantityReader,
+        IReadOnlyList<Collider2D> colliders)
+    {
+        if (id.Value == 0 || extractor == null || quantityReader == null ||
+            extractor.Id != id || quantityReader.Id != id)
+        {
+            return false;
+        }
+
+        if (_lootSources.TryGetValue(id, out LootSourceRegistration existing))
+        {
+            return ReferenceEquals(existing.Extractor, extractor) &&
+                ReferenceEquals(existing.QuantityReader, quantityReader);
+        }
+
+        int colliderCount = colliders?.Count ?? 0;
+        var copiedColliders = new Collider2D[colliderCount];
+        for (int i = 0; i < colliderCount; i++)
+        {
+            Collider2D collider = colliders[i];
+            copiedColliders[i] = collider;
+            if (collider != null && _colliders.TryGetValue(collider, out EntityId existingId) && existingId != id)
+            {
+                return false;
+            }
+        }
+
+        // Mutation starts only after every capability and collider has passed validation.
+        _lootSources.Add(id, new LootSourceRegistration(extractor, quantityReader, copiedColliders));
+        for (int i = 0; i < copiedColliders.Length; i++)
+        {
+            if (copiedColliders[i] != null)
+            {
+                _colliders[copiedColliders[i]] = id;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Removes a grouped loot source only when both expected capability instances match.
+    /// </summary>
+    public bool TryUnregisterLootSource(
+        EntityId id,
+        ILootExtractor expectedExtractor,
+        ILootQuantityReader expectedQuantityReader)
+    {
+        if (!_lootSources.TryGetValue(id, out LootSourceRegistration existing) ||
+            !ReferenceEquals(existing.Extractor, expectedExtractor) ||
+            !ReferenceEquals(existing.QuantityReader, expectedQuantityReader))
+        {
+            return false;
+        }
+
+        _lootSources.Remove(id);
+        for (int i = 0; i < existing.Colliders.Length; i++)
+        {
+            Collider2D collider = existing.Colliders[i];
+            if (collider != null && _colliders.TryGetValue(collider, out EntityId mappedId) && mappedId == id)
+            {
+                _colliders.Remove(collider);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves both capabilities that comprise a registered loot source.
+    /// </summary>
+    public bool TryGetLootSource(
+        EntityId id,
+        out ILootExtractor extractor,
+        out ILootQuantityReader quantityReader)
+    {
+        if (_lootSources.TryGetValue(id, out LootSourceRegistration registration))
+        {
+            extractor = registration.Extractor;
+            quantityReader = registration.QuantityReader;
+            return true;
+        }
+
+        extractor = null;
+        quantityReader = null;
         return false;
     }
 

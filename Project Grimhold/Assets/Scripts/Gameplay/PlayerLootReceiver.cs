@@ -14,7 +14,8 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
     ILootExtractor,
     ILootContentReader,
     ILootQuantityReader,
-    ILootSlotCapacityReader
+    ILootSlotCapacityReader,
+    ILootPickupFeedbackSink
 {
     public const int MaxLootTypes = 64;
 
@@ -29,18 +30,6 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
 
     [Networked]
     public int LootChangeSequence { get; private set; }
-
-    [Networked]
-    private int LastGrantedDefinitionIndex { get; set; }
-
-    [Networked]
-    private int LastGrantedAmount { get; set; }
-
-    [Networked]
-    private int LastGrantSourceIdValue { get; set; }
-
-    [Networked]
-    private int LastGrantTick { get; set; }
 
     private EntityRegistry _registry;
     private ICharacter _character;
@@ -217,54 +206,15 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
     /// </summary>
     public void CommitReceive(in LootTransferRequest request)
     {
-        if (!HasStateAuthority)
-        {
-            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitReceive)} requires State Authority.", this);
-            return;
-        }
-
-        if (_lootCatalog == null || !_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
-        {
-            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitReceive)} was called without a resolvable validated loot definition.", this);
-            return;
-        }
+        EnsureReceiveCommitContract(request, out int definitionIndex, out int currentAmount);
 
         NetworkDictionary<int, int> inventory = LootInventory;
-        bool alreadyHeld = inventory.TryGet(definitionIndex, out int currentAmount);
-        LootTransferFailureReason inventoryFailure = LootInventoryRules.ValidateReceive(
-            alreadyHeld,
-            currentAmount,
-            inventory.Count,
-            _slotCapacity,
-            request.RequestedAmount);
-
-        if (definitionIndex < 0 || definitionIndex >= MaxLootTypes ||
-            request.SourceId.Value == 0 ||
-            request.DestinationId != Id ||
-            !LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes) ||
-            inventoryFailure != LootTransferFailureReason.None ||
-            (!inventory.ContainsKey(definitionIndex) && inventory.Count >= inventory.Capacity))
-        {
-            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitReceive)} preconditions no longer hold. The caller violated the validate/commit contract.", this);
-            return;
-        }
 
         inventory.Set(
             definitionIndex,
             LootInventoryRules.CalculateReceivedAmount(currentAmount, request.RequestedAmount));
 
         LootChangeSequence++;
-        LastGrantedDefinitionIndex = definitionIndex;
-        LastGrantedAmount = request.RequestedAmount;
-        LastGrantSourceIdValue = request.SourceId.Value;
-        LastGrantTick = request.SimulationTick;
-
-        RPC_ReceiveLootGrant(
-            LootChangeSequence,
-            request.SourceId.Value,
-            definitionIndex,
-            request.RequestedAmount,
-            request.SimulationTick);
     }
 
     /// <summary>
@@ -334,34 +284,9 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
     /// </summary>
     public void CommitExtraction(in LootTransferRequest request)
     {
-        if (!HasStateAuthority)
-        {
-            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitExtraction)} requires State Authority.", this);
-            return;
-        }
-
-        if (_lootCatalog == null || !_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
-        {
-            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitExtraction)} was called without a resolvable validated loot definition.", this);
-            return;
-        }
+        EnsureExtractionCommitContract(request, out int definitionIndex, out int currentAmount);
 
         NetworkDictionary<int, int> inventory = LootInventory;
-        bool alreadyHeld = inventory.TryGet(definitionIndex, out int currentAmount);
-        LootTransferFailureReason inventoryFailure = LootInventoryRules.ValidateExtraction(
-            alreadyHeld,
-            currentAmount,
-            request.RequestedAmount);
-
-        if (definitionIndex < 0 || definitionIndex >= MaxLootTypes ||
-            request.SourceId != Id ||
-            request.DestinationId.Value == 0 ||
-            !LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes) ||
-            inventoryFailure != LootTransferFailureReason.None)
-        {
-            Debug.LogError($"{nameof(PlayerLootReceiver)}: {nameof(CommitExtraction)} preconditions no longer hold. The caller violated the validate/commit contract.", this);
-            return;
-        }
 
         int remainingAmount = LootInventoryRules.CalculateRemainingAmount(
             currentAmount,
@@ -376,6 +301,28 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
         }
 
         LootChangeSequence++;
+    }
+
+    /// <summary>
+    /// Sends pickup-specific presentation only after a world pickup has committed successfully.
+    /// Generic loot transfers never call this integration boundary.
+    /// </summary>
+    public void PublishPickupGrant(in LootTransferRequest request)
+    {
+        if (!HasStateAuthority || request.DestinationId != Id || request.SourceId.Value == 0 ||
+            request.RequestedAmount <= 0 || _lootCatalog == null ||
+            !_lootCatalog.TryGetIndex(request.LootId, out int definitionIndex))
+        {
+            Debug.LogError($"{nameof(PlayerLootReceiver)}: Invalid pickup feedback contract.", this);
+            throw new InvalidOperationException("Pickup feedback requires a successfully committed request on State Authority.");
+        }
+
+        RPC_ReceiveLootGrant(
+            LootChangeSequence,
+            request.SourceId.Value,
+            definitionIndex,
+            request.RequestedAmount,
+            request.SimulationTick);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
@@ -562,6 +509,53 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
         }
 
         return true;
+    }
+
+    private void EnsureReceiveCommitContract(
+        in LootTransferRequest request,
+        out int definitionIndex,
+        out int currentAmount)
+    {
+        definitionIndex = default;
+        currentAmount = default;
+        if (!HasStateAuthority || request.SourceId.Value == 0 || request.DestinationId != Id ||
+            request.RequestedAmount <= 0 || _lootCatalog == null ||
+            !_lootCatalog.TryGetIndex(request.LootId, out definitionIndex) ||
+            definitionIndex < 0 || definitionIndex >= MaxLootTypes)
+        {
+            FailCommitContract(nameof(CommitReceive));
+        }
+
+        NetworkDictionary<int, int> inventory = LootInventory;
+        bool alreadyHeld = inventory.TryGet(definitionIndex, out currentAmount);
+        if ((!alreadyHeld && (inventory.Count >= _slotCapacity || inventory.Count >= inventory.Capacity)) ||
+            (alreadyHeld && currentAmount <= 0) || currentAmount > int.MaxValue - request.RequestedAmount)
+        {
+            FailCommitContract(nameof(CommitReceive));
+        }
+    }
+
+    private void EnsureExtractionCommitContract(
+        in LootTransferRequest request,
+        out int definitionIndex,
+        out int currentAmount)
+    {
+        definitionIndex = default;
+        currentAmount = default;
+        if (!HasStateAuthority || request.SourceId != Id || request.DestinationId.Value == 0 ||
+            request.RequestedAmount <= 0 || _lootCatalog == null ||
+            !_lootCatalog.TryGetIndex(request.LootId, out definitionIndex) ||
+            definitionIndex < 0 || definitionIndex >= MaxLootTypes ||
+            !LootInventory.TryGet(definitionIndex, out currentAmount) || currentAmount < request.RequestedAmount)
+        {
+            FailCommitContract(nameof(CommitExtraction));
+        }
+    }
+
+    private void FailCommitContract(string commitName)
+    {
+        Debug.LogError($"{nameof(PlayerLootReceiver)}: {commitName} contract was violated after successful validation.", this);
+        throw new InvalidOperationException($"{commitName} preconditions changed after successful validation.");
     }
 
 #if UNITY_EDITOR

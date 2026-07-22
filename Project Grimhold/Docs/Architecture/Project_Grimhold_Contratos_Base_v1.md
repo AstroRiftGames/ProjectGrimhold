@@ -264,13 +264,15 @@ Reading must not expose a mutable backing collection. A caller may retain or enu
 
 Gameplay slots count distinct loot IDs with positive quantities. Increasing an existing ID does not consume another slot; receiving a new ID requires a free slot. There is no automatic splitting, weight capacity, or per-stack maximum in the current contract.
 
-The `NetworkDictionary` capacity of 64 used by `PlayerLootReceiver` is a Fusion representation limit, not gameplay slot capacity. Reaching a technical representation constraint must not be reported as `InventoryFull`.
+The `NetworkDictionary` capacity of 64 used by `PlayerLootReceiver` and `NetworkLootContainer` is a Fusion representation limit, not gameplay slot capacity. Reaching a technical representation constraint must not be reported as `InventoryFull`.
 
 `PlayerLootReceiver` implements content reading, quantity queries, configurable gameplay slots, reception, and extraction. Its serialized slot capacity is positive, cannot exceed the `NetworkDictionary` representation limit, and is configured to 16 on the base network-player prefab. The value is local static configuration rather than replicated state.
 
 State Authority is the only writer. Reception stacks an existing ID regardless of occupied-slot count and rejects a new ID with `InventoryFull` only when the configured gameplay capacity is full. Extraction requires the complete requested quantity, removes an entry when its remainder reaches zero, and never stores zero or negative quantities. Both successful commits increment `LootChangeSequence`, allowing Input Authority presentation to refresh from the replicated read-only snapshot.
 
 The temporary inventory has the same lifecycle as the player's `NetworkObject`. Player despawn or runner shutdown destroys its replicated contents, local presentation queues are cleared during despawn, and a player spawned in a later session starts from an empty network collection. No loot state is persisted in static fields, services, or `ScriptableObject` assets.
+
+`NetworkLootContainer` is a reusable source implementing extraction, quantity, content and slot-capacity reads. It is not a receiver or interactable. State Authority owns its replicated catalog-index quantities, initialization, availability and change sequence. Availability is independent of emptiness and changing it does not mutate content or the sequence.
 
 ## 10. Loot prevalidation and commit protocol
 
@@ -301,7 +303,7 @@ void CommitExtraction(in LootTransferRequest request);
 
 If a commit cannot apply the prevalidated amount, the caller or implementation violated the protocol. That condition must be diagnosed as an integration/programming error rather than converted into a late gameplay rejection.
 
-TASK-31 implements the player endpoint capabilities but does not implement an atomic runtime transfer between two storage endpoints. There is deliberately no `ILootTransferCoordinator` contract yet.
+`LootTransferTransaction.Execute` implements the atomic runtime protocol for already resolved endpoints. It validates extraction, validates reception, commits extraction and then commits reception. It deliberately does not resolve entities, catalogs or distance and is not a runner-scoped coordinator.
 
 ## 11. Authoritative pickup integration
 
@@ -316,23 +318,18 @@ Its authoritative sequence is:
 5. Call `ValidateReceive`.
 6. Restore the reservation on every rejection before commit.
 7. Call `CommitReceive` immediately after successful validation.
-8. Produce complete success and despawn only after the commit.
+8. Publish pickup-only feedback through `ILootPickupFeedbackSink` after commit.
+9. Produce complete success and despawn only after the commit.
 
 This ordering prevents duplicate reward delivery while preserving the pickup's existing single-consumption transaction. It is an integration between a consumable source and a receiver, not a general transfer between two inventories.
 
-## 12. Runtime transfer work not yet implemented
+## 12. Runtime container transfer integration
 
-A future authoritative coordinator must:
+`PlayerLootTransferNetworkController` accepts one legitimate Input Authority request at a time. Its Fusion RPC transports only source integer ID, catalog index and sequence. State Authority derives the player destination, complete current stack quantity, loot identity, distance and simulation tick before invoking `LootTransferTransaction`.
 
-1. Resolve source and destination capabilities.
-2. Validate State Authority, distance, and endpoint availability.
-3. Prevalidate extraction and reception.
-4. Exclude or serialize competing requests that affect the same content.
-5. Define the commit order.
-6. Execute both commits synchronously without re-entry or yielding control.
-7. Produce the single `LootTransferResult`.
+The authoritative adapter owns one local non-networked pending request and one last-processed cache. Pending cannot be overwritten. Exact pending duplicates are ignored, conflicting payloads do not affect gameplay, busy/stale sequences receive an internal transport rejection where required, and an exact processed duplicate replays only the cached primitive confirmation.
 
-That later work also owns capability registration for extractable containers and Host/Client tests for storage-to-storage transfers. TASK-31 does not claim those guarantees.
+`LootTransferConfirmation` is an integration payload rather than a core gameplay contract. It preserves sequence, endpoint IDs, catalog index, tick and domain result while resolved `LootId` metadata remains optional. Rejections may be usable without a local definition; success requires one.
 
 ## 13. Presentation contracts
 
@@ -341,11 +338,12 @@ Presentation payloads describe confirmed gameplay without owning or mutating gam
 - `AttackPerformedEvent` describes a successfully executed attack for animation, audio, or VFX.
 - `DamageResolvedEvent` pairs a request with its resolved damage result.
 - `InteractionPresentationEvent` carries the authoritative interaction sequence and outcome to local presentation.
-- `LootGrantPresentationEvent` describes the current authoritative pickup delivery and resolves visual metadata locally through the loot catalog.
+- `LootGrantPresentationEvent` describes only an authoritative world-pickup delivery and resolves visual metadata locally through the loot catalog.
+- `LootTransferConfirmation` describes a player adapter transfer result and may omit unresolved loot metadata for rejections.
 
 Presentation events must not apply damage, commit inventory changes, spawn or despawn authoritative objects, or decide whether an interaction succeeded. Networked gameplay remains the source of truth.
 
-`LootGrantPresentationEvent` remains specific to the current pickup flow. General transfer presentation will be designed when runtime container transfers have real consumers.
+`PlayerLootReceiver.CommitReceive` emits no feedback. `NetworkLootPickup` publishes the pickup event through the optional sink after a successful commit. Container confirmations are delivered separately during `Render` and do not generate the pickup toast.
 
 ## 14. Validation expectations
 
@@ -363,4 +361,4 @@ Contract tests should focus on observable semantics:
 
 Architecture independence is verified through actual dependencies, imports, public types, and diff review. Tests must not infer architecture by searching for concrete class names such as `Player`, `Chest`, or `EnemyCorpse`.
 
-Host/Client transfer coordination, distance, availability, commit ordering, and concurrency tests remain pending until a runtime coordinator exists.
+EditMode tests cover the pure transaction, bounded request state, grouped registry behavior and prefab composition. Host/Client range, capacity, competition and presentation remain manual checks through the separate development harness. The harness also queues availability changes from the State Authority peer so `SetAvailability` still executes inside authoritative simulation.

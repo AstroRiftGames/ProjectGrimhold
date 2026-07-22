@@ -1,0 +1,87 @@
+using System;
+using System.Collections.Generic;
+
+/// <summary>
+/// Builds a fully validated, deterministic initial representation for a loot container.
+/// </summary>
+public static class LootContainerInitializationRules
+{
+    /// <summary>
+    /// Resolves initial entries to catalog indices without returning partial output on failure.
+    /// </summary>
+    public static bool TryBuild(
+        IReadOnlyList<LootContainerInitialEntry> initialEntries,
+        LootDefinitionCatalog catalog,
+        int slotCapacity,
+        int networkCapacity,
+        out IReadOnlyList<KeyValuePair<int, int>> resolvedEntries,
+        out string error)
+    {
+        resolvedEntries = Array.Empty<KeyValuePair<int, int>>();
+        error = null;
+
+        string catalogError = null;
+        if (catalog == null || !catalog.TryValidate(out catalogError))
+        {
+            error = $"Loot catalog is missing or invalid. {catalogError}";
+            return false;
+        }
+
+        if (!LootInventoryRules.IsValidSlotCapacity(slotCapacity, networkCapacity))
+        {
+            error = $"Slot capacity must be between 1 and {networkCapacity}.";
+            return false;
+        }
+
+        if (catalog.DefinitionCount > networkCapacity)
+        {
+            error = $"Catalog contains {catalog.DefinitionCount} definitions but only {networkCapacity} can be represented.";
+            return false;
+        }
+
+        int count = initialEntries?.Count ?? 0;
+        if (count > slotCapacity || count > networkCapacity)
+        {
+            error = "Initial content exceeds the configured slot capacity.";
+            return false;
+        }
+
+        var entries = new List<KeyValuePair<int, int>>(count);
+        var seenIndices = new HashSet<int>();
+        for (int i = 0; i < count; i++)
+        {
+            LootContainerInitialEntry entry = initialEntries[i];
+            string definitionError = null;
+            if (entry.Definition == null || !entry.Definition.TryValidate(out definitionError))
+            {
+                error = $"Initial entry {i} has no valid definition. {definitionError}";
+                return false;
+            }
+
+            if (entry.Amount <= 0)
+            {
+                error = $"Initial entry {i} has a non-positive amount.";
+                return false;
+            }
+
+            if (!catalog.TryGetIndex(entry.Definition.LootId, out int catalogIndex) ||
+                catalogIndex < 0 || catalogIndex >= networkCapacity)
+            {
+                error = $"Initial entry {i} is not representable by the assigned catalog.";
+                return false;
+            }
+
+            if (!seenIndices.Add(catalogIndex))
+            {
+                error = $"Initial content contains duplicate catalog index {catalogIndex}.";
+                return false;
+            }
+
+            entries.Add(new KeyValuePair<int, int>(catalogIndex, entry.Amount));
+        }
+
+        entries.Sort((left, right) => left.Key.CompareTo(right.Key));
+        resolvedEntries = entries.AsReadOnly();
+        return true;
+    }
+}
