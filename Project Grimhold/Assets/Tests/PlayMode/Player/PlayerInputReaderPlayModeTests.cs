@@ -130,6 +130,36 @@ namespace Assets.Tests.PlayMode.Player
         }
 
         [Test]
+        public void InteractPressedLocally_FiresDuringSuppressionAndDoesNotTransport()
+        {
+            int localPressCount = 0;
+            _reader.InteractPressedLocally += () => localPressCount++;
+            using IDisposable suppression = _reader.AcquireGameplayInputSuppression();
+
+            SetKey(Key.E, true);
+
+            Assert.That(localPressCount, Is.EqualTo(1));
+            Assert.That(_reader.ConsumeNetworkInput().Buttons.IsSet(PlayerInputButton.Interact), Is.False);
+        }
+
+        [Test]
+        public void ReleasingSuppressionWhileHoldingInteract_RequiresPhysicalReleaseBeforeNewInteractTransport()
+        {
+            IDisposable suppression = _reader.AcquireGameplayInputSuppression();
+            SetKey(Key.E, true);
+
+            suppression.Dispose();
+
+            Assert.That(_reader.ConsumeNetworkInput().Buttons.IsSet(PlayerInputButton.Interact), Is.False);
+
+            SetKey(Key.E, false);
+            SetKey(Key.E, true);
+            InvokeReaderLifecycle("Update");
+
+            Assert.That(_reader.ConsumeNetworkInput().Buttons.IsSet(PlayerInputButton.Interact), Is.True);
+        }
+
+        [Test]
         public void DisableEnable_ClearsPendingDiscreteInputAndKeepsMapsUsable()
         {
             SetKey(Key.E, true);

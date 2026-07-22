@@ -57,16 +57,33 @@ To avoid duplicate entity spawning and allow recarrying or reloading the same sc
 * **OnSceneLoadStart**: When a load starts, `OnSceneLoadStart` increments the generation counter (`_currentSceneLoadGeneration`), sets the state to `Pending`, clears spatial configuration lookups, and locks active spawning (`_spawnsBlocked = true`).
 * **OnSceneLoadDone**: Sets state to `Processing` immediately before resolving configurations to prevent duplicate executions from repeated callbacks. Spawns the characters and initial entities. On success, sets state to `Completed` and unblocks spawns (`_spawnsBlocked = false`). On failure, the state becomes `Failed` and spawning remains locked. No auto-rebuild is attempted on failed generations; a reload is required.
 
+Loot spawning has an additional runner-local generation record. `InitialLootSpawnState` remains storage-only: the manager records a point only after Fusion returned the expected object, the pre-spawn override was applied, `NetworkLootContainer` initialized, and the production container became available. Duplicate callbacks therefore cannot produce a second batch. A failed instance is despawned authoritatively and leaves the point unrecorded; a retry in the same generation derives the same seed and roll. `InitializeForRunner`, the next scene-load generation, and `OnShutdown` clear the point record so a new generation can spawn its own clean batch. This record is non-static and does not claim containers spawned by other systems.
+
 ---
 
 ## 5. Separation of Configurations & Scene Resolution
 
 Configurations are split between persistent data and scene-specific spatial layouts:
-- **Persistent Configuration**: Prefab catalogs (e.g. `PlayerClassCatalog` and `_enemyPrefab`) are owned by the launcher and passed to `NetworkSpawnManager` during initialization.
+- **Persistent Configuration**: Player and enemy prefab catalogs are owned by the launcher and passed to the runner-scoped `NetworkSpawnManager` during initialization. Gameplay's scene-configured manager contributes the explicit `LootContainer.prefab` reference through `CopyReferencesFrom`; the duplicate component is then destroyed while its colocated spatial configuration remains.
 - **Scene Configuration**: Scene-specific spawn points and entity quantities are stored in `NetworkSpawnSceneConfiguration` components located in the respective scenes.
 - **Runner-Scoped Scene Resolution**: The manager resolves configurations strictly within the roots and children of `runner.SceneManager.MainRunnerScene`. Falling back to the active scene is prohibited.
 - **Scene Config Validation**: Spawn points inside `NetworkSpawnSceneConfiguration` must belong to the same scene structure. If multiple configurations are found in the same scene, the pipeline fails closed.
 - **Strict Ordering**: Upon loading a scene, the configuration is applied first, then pending players are spawned, and finally scene entities are spawned.
+
+Initial scene groups use an explicit dispatch policy:
+
+```text
+Players -> SpawnPlayer
+Enemies -> SpawnEnemy
+Loot -> SpawnLootContainer
+NPCs / Bosses / Misc -> warning and skip
+```
+
+An unsupported group never falls back to an enemy prefab. A missing loot-container reference reports a contextual error and skips only `Loot`; player and enemy processing continues.
+
+Gameplay configures `SpawnGroupType.Loot` with ordered scene transforms. The Host/Server spawns `LootContainer.prefab` without Input Authority, using loop index `0..N-1` as stable point identity. One cryptographic session seed is created locally on the authoritative runner; a pure 64-bit mixer combines it with scene-load generation and point index. The manager validates the prefab table, random-content component, loot table, catalog, weights, quantities and capacities before spawning. It rolls an immutable snapshot and applies the result with Fusion 2.1.1 `OnBeforeSpawned`; clients never roll or receive a seed. When requested amount exceeds point count, it is clamped to the available points with a warning, so an initial generation never overlaps two containers on one point.
+
+`OnBeforeSpawned` is synchronous but returns `void` and is not a cancellation mechanism. After `runner.Spawn`, the manager verifies the returned identity, callback result, container initialization and final availability. Any failure causes immediate State Authority despawn and prevents point registration. A missing prefab, disabled random configuration or invalid table skips only Loot; player and enemy spawning continues. The synchronized container dictionary is the only replicated result, so late joiners receive existing content without rerolling.
 
 ---
 

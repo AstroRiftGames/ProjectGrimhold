@@ -38,6 +38,13 @@ public sealed class PlayerInputReader : MonoBehaviour
     /// </summary>
     public event Action InventoryToggleRequested;
 
+    /// <summary>
+    /// Raised for the local-only interaction press edge.
+    /// Presentation elements observe this event (e.g., to close the looting screen)
+    /// without sending network RPCs or advancing gameplay simulation.
+    /// </summary>
+    public event Action InteractPressedLocally;
+
     private void Awake()
     {
         CacheDependencies();
@@ -81,7 +88,16 @@ public sealed class PlayerInputReader : MonoBehaviour
 
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
-        if (IsGameplayInputSuppressed || _interactRequiresRelease)
+        if (_interactRequiresRelease)
+        {
+            return;
+        }
+
+        bool wasSuppressed = IsGameplayInputSuppressed;
+
+        InteractPressedLocally?.Invoke();
+
+        if (wasSuppressed || IsGameplayInputSuppressed)
         {
             return;
         }
@@ -280,15 +296,14 @@ public sealed class PlayerInputReader : MonoBehaviour
 
     private void UpdateDiscreteButtonRearm()
     {
-        if (IsGameplayInputSuppressed)
-        {
-            ResetDiscreteInputState();
-            return;
-        }
-
         if (_interactRequiresRelease && !_inputActions.Gameplay.Interact.IsPressed())
         {
             _interactRequiresRelease = false;
+        }
+
+        if (IsGameplayInputSuppressed)
+        {
+            ResetDiscreteInputState();
         }
     }
 

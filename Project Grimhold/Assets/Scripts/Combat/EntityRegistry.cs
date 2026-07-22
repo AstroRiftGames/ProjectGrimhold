@@ -73,6 +73,27 @@ public sealed class EntityRegistry : MonoBehaviour
             return false;
         }
 
+        if (entity is IDamageable damageableCandidate &&
+            _entities.TryGetValue(id, out IDamageable existingDamageable) &&
+            !ReferenceEquals(existingDamageable, damageableCandidate))
+        {
+            return false;
+        }
+
+        if (entity is IInteractable interactableCandidate &&
+            _interactables.TryGetValue(id, out IInteractable existingInteractable) &&
+            !ReferenceEquals(existingInteractable, interactableCandidate))
+        {
+            return false;
+        }
+
+        if (entity is ILootReceiver receiverCandidate &&
+            _lootReceivers.TryGetValue(id, out ILootReceiver existingReceiver) &&
+            !ReferenceEquals(existingReceiver, receiverCandidate))
+        {
+            return false;
+        }
+
         // Validate colliders are not registered to someone else
         if (colliders != null)
         {
@@ -187,6 +208,43 @@ public sealed class EntityRegistry : MonoBehaviour
     public bool TryGetInteractable(EntityId id, out IInteractable interactable)
     {
         return _interactables.TryGetValue(id, out interactable);
+    }
+
+    /// <summary>
+    /// Registers only an interactable capability for an existing or future entity ID.
+    /// Collider ownership and every other capability remain unchanged.
+    /// </summary>
+    public bool TryRegisterInteractable(EntityId id, IInteractable interactable)
+    {
+        if (interactable == null || id.Value == 0 || interactable.Id != id)
+        {
+            return false;
+        }
+
+        if (_interactables.TryGetValue(id, out IInteractable existing))
+        {
+            return ReferenceEquals(existing, interactable);
+        }
+
+        _interactables.Add(id, interactable);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes only the interactable capability owned by the expected instance.
+    /// Loot-source registration and collider mappings are not modified.
+    /// </summary>
+    public bool TryUnregisterInteractable(EntityId id, IInteractable expectedInteractable)
+    {
+        if (expectedInteractable == null || id.Value == 0 ||
+            !_interactables.TryGetValue(id, out IInteractable existing) ||
+            !ReferenceEquals(existing, expectedInteractable))
+        {
+            return false;
+        }
+
+        _interactables.Remove(id);
+        return true;
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,6 +18,41 @@ public sealed class RaidInventorySlotView : MonoBehaviour
     [SerializeField]
     private TMP_Text _amountText;
 
+    [SerializeField]
+    private Button _button;
+
+    [SerializeField]
+    private Image _background;
+
+    [SerializeField]
+    private Color _normalColor = new(0.12f, 0.12f, 0.14f, 0.95f);
+
+    [SerializeField]
+    private Color _selectedColor = new(0.28f, 0.22f, 0.08f, 1f);
+
+    private LootId _lootId;
+    private bool _isOccupied;
+
+    public event Action<LootId> SelectionRequested;
+    public LootId LootId => _lootId;
+    public bool IsOccupied => _isOccupied;
+
+    private void Awake()
+    {
+        if (_button != null)
+        {
+            _button.onClick.AddListener(OnClicked);
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (_button != null)
+        {
+            _button.onClick.RemoveListener(OnClicked);
+        }
+    }
+
     public void Present(in RaidInventorySlotData data)
     {
         if (!data.IsOccupied)
@@ -24,6 +60,9 @@ public sealed class RaidInventorySlotView : MonoBehaviour
             Clear();
             return;
         }
+
+        _lootId = data.LootId;
+        _isOccupied = true;
 
         if (_icon != null)
         {
@@ -44,6 +83,8 @@ public sealed class RaidInventorySlotView : MonoBehaviour
 
     public void Clear()
     {
+        _lootId = default;
+        _isOccupied = false;
         if (_icon != null)
         {
             _icon.sprite = null;
@@ -58,6 +99,28 @@ public sealed class RaidInventorySlotView : MonoBehaviour
         if (_amountText != null)
         {
             _amountText.text = string.Empty;
+        }
+        SetInteraction(false, false);
+    }
+
+    public void SetInteraction(bool interactable, bool selected)
+    {
+        if (_button != null)
+        {
+            _button.interactable = interactable && _isOccupied;
+        }
+
+        if (_background != null)
+        {
+            _background.color = selected && _isOccupied ? _selectedColor : _normalColor;
+        }
+    }
+
+    private void OnClicked()
+    {
+        if (_isOccupied && _button != null && _button.interactable && _lootId.IsValid)
+        {
+            SelectionRequested?.Invoke(_lootId);
         }
     }
 }

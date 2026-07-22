@@ -179,7 +179,9 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3bfaf0db7d43c7f4bb25263fb20ddba7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerSpawner
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkSpawnManager
+  _lootContainerPrefab:
+    RawGuidValue: 2c19a78647c64b84a765ff0280706b7d
 --- !u!4 &43931934
 Transform:
   m_ObjectHideFlags: 0
@@ -222,6 +224,13 @@ MonoBehaviour:
     - {fileID: 1120109935}
     - {fileID: 381087417}
     - {fileID: 1857885538}
+    Amount: 4
+  - Group: 2
+    SpawnPoints:
+    - {fileID: 868585263}
+    - {fileID: 1130588392}
+    - {fileID: 1461805917}
+    - {fileID: 1824014180}
     Amount: 4
 --- !u!1 &381087416
 GameObject:
@@ -486,7 +495,7 @@ GameObject:
   m_Component:
   - component: {fileID: 514587923}
   m_Layer: 0
-  m_Name: Crystals Spawnpoints
+  m_Name: Loot Spawnpoints
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -871,7 +880,7 @@ Transform:
   m_GameObject: {fileID: 868585262}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -5.63, y: -1.09, z: 0}
+  m_LocalPosition: {x: -9.17, y: 4.33, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -979,7 +988,7 @@ Transform:
   m_GameObject: {fileID: 1130588391}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 5.36, y: 0.73, z: 0}
+  m_LocalPosition: {x: 23.2, y: -5.16, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1111,7 +1120,7 @@ Transform:
   m_GameObject: {fileID: 1461805916}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 3.39, y: -1.24, z: 0}
+  m_LocalPosition: {x: -25.21, y: -20.25, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1142,7 +1151,7 @@ Transform:
   m_GameObject: {fileID: 1824014179}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -6.86, y: 4.21, z: 0}
+  m_LocalPosition: {x: 5.63, y: -27.85, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

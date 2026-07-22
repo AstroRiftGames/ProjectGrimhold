@@ -7,6 +7,7 @@ using UnityEngine;
 public readonly struct RaidInventorySlotData
 {
     public bool IsOccupied { get; }
+    public LootId LootId { get; }
     public Sprite Icon { get; }
     public string DisplayName { get; }
     public int Amount { get; }
@@ -14,12 +15,14 @@ public readonly struct RaidInventorySlotData
 
     private RaidInventorySlotData(
         bool isOccupied,
+        LootId lootId,
         Sprite icon,
         string displayName,
         int amount,
         bool usesFallback)
     {
         IsOccupied = isOccupied;
+        LootId = lootId;
         Icon = icon;
         DisplayName = displayName;
         Amount = amount;
@@ -48,6 +51,7 @@ public readonly struct RaidInventorySlotData
 
         return new RaidInventorySlotData(
             true,
+            entry.LootId,
             icon,
             displayName,
             entry.Amount,

@@ -34,12 +34,17 @@ public sealed class PlayerLootTransferNetworkController : NetworkBehaviour
 
     private readonly LootTransferClientRequestState _clientRequest = new();
     private readonly LootTransferRequestState _authoritativeRequests = new();
-    private readonly Queue<LootTransferConfirmation> _pendingConfirmations = new();
+    private readonly PresentationNotificationQueue _presentationNotifications = new();
 
     /// <summary>
     /// Local presentation notification emitted during Render after a transport confirmation is reconstructed.
     /// </summary>
     public event Action<LootTransferConfirmation> TransferConfirmed;
+
+    /// <summary>
+    /// Local presentation notification published during Render after the legitimate request state changes.
+    /// </summary>
+    public event Action<bool> RequestInFlightChanged;
 
     public bool HasRequestInFlight => _clientRequest.HasInFlight;
 
@@ -70,9 +75,15 @@ public sealed class PlayerLootTransferNetworkController : NetworkBehaviour
 
     public override void Render()
     {
-        while (_pendingConfirmations.Count > 0)
+        while (_presentationNotifications.TryDequeue(out PresentationNotification notification))
         {
-            TransferConfirmed?.Invoke(_pendingConfirmations.Dequeue());
+            if (notification.Kind == PresentationNotificationKind.RequestInFlightChanged)
+            {
+                RequestInFlightChanged?.Invoke(notification.HasRequestInFlight);
+                continue;
+            }
+
+            TransferConfirmed?.Invoke(notification.Confirmation);
         }
     }
 
@@ -106,6 +117,7 @@ public sealed class PlayerLootTransferNetworkController : NetworkBehaviour
         }
 
         _clientRequest.MarkSent(identity);
+        EnqueueRequestStateChanged(true);
         return true;
     }
 
@@ -126,6 +138,56 @@ public sealed class PlayerLootTransferNetworkController : NetworkBehaviour
     public bool DebugTryGetInFlightIdentity(out LootTransferRequestIdentity identity)
     {
         return _clientRequest.TryGetExpected(out identity);
+    }
+
+    /// <summary>
+    /// Stages an accepted local request without transport so deferred presentation ordering can be tested.
+    /// </summary>
+    public bool DebugStageAcceptedRequestForPresentation(
+        EntityId sourceId,
+        int catalogIndex,
+        out uint requestSequence)
+    {
+        requestSequence = 0;
+        if (!_clientRequest.TryCreateCandidate(sourceId, catalogIndex, out LootTransferRequestIdentity identity))
+        {
+            return false;
+        }
+
+        _clientRequest.MarkSent(identity);
+        EnqueueRequestStateChanged(true);
+        requestSequence = identity.RequestSequence;
+        return true;
+    }
+
+    /// <summary>
+    /// Stages local request finalization and optionally its reconstructed confirmation for Render tests.
+    /// </summary>
+    public bool DebugStageRequestCompletionForPresentation(
+        uint requestSequence,
+        bool publishConfirmation,
+        in LootTransferConfirmation confirmation)
+    {
+        if (!_clientRequest.TryRelease(requestSequence, out _))
+        {
+            return false;
+        }
+
+        EnqueueRequestStateChanged(false);
+        if (publishConfirmation)
+        {
+            EnqueueConfirmation(confirmation);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Clears request and deferred presentation state without invoking subscribers.
+    /// </summary>
+    public void DebugResetLocalPresentationState()
+    {
+        ResetLocalState();
     }
 #endif
 
@@ -201,6 +263,8 @@ public sealed class PlayerLootTransferNetworkController : NetworkBehaviour
             return;
         }
 
+        EnqueueRequestStateChanged(false);
+
         if (!LootTransferConfirmation.TryReconstruct(
                 requestSequence,
                 sourceIdValue,
@@ -220,7 +284,7 @@ public sealed class PlayerLootTransferNetworkController : NetworkBehaviour
             return;
         }
 
-        _pendingConfirmations.Enqueue(confirmation);
+        EnqueueConfirmation(confirmation);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
@@ -231,6 +295,8 @@ public sealed class PlayerLootTransferNetworkController : NetworkBehaviour
             Debug.LogError($"{nameof(PlayerLootTransferNetworkController)}: Discarded transport rejection for unknown sequence {requestSequence}.", this);
             return;
         }
+
+        EnqueueRequestStateChanged(false);
 
         if (!Enum.IsDefined(typeof(LootTransferTransportRejectionReason), rejectionReasonValue) ||
             rejectionReasonValue == (int)LootTransferTransportRejectionReason.Uninitialized)
@@ -377,7 +443,106 @@ public sealed class PlayerLootTransferNetworkController : NetworkBehaviour
     {
         _clientRequest.Reset();
         _authoritativeRequests.Reset();
-        _pendingConfirmations.Clear();
+        _presentationNotifications.Clear();
+    }
+
+    private void EnqueueRequestStateChanged(bool hasRequestInFlight)
+    {
+        if (!_presentationNotifications.TryEnqueue(PresentationNotification.RequestState(hasRequestInFlight)))
+        {
+            Debug.LogError($"{nameof(PlayerLootTransferNetworkController)}: Presentation notification queue capacity was exceeded.", this);
+        }
+    }
+
+    private void EnqueueConfirmation(in LootTransferConfirmation confirmation)
+    {
+        if (!_presentationNotifications.TryEnqueue(PresentationNotification.Transfer(confirmation)))
+        {
+            Debug.LogError($"{nameof(PlayerLootTransferNetworkController)}: Presentation notification queue capacity was exceeded.", this);
+        }
+    }
+
+    private enum PresentationNotificationKind
+    {
+        RequestInFlightChanged,
+        TransferConfirmed
+    }
+
+    private readonly struct PresentationNotification
+    {
+        public PresentationNotificationKind Kind { get; }
+        public bool HasRequestInFlight { get; }
+        public LootTransferConfirmation Confirmation { get; }
+
+        private PresentationNotification(
+            PresentationNotificationKind kind,
+            bool hasRequestInFlight,
+            in LootTransferConfirmation confirmation)
+        {
+            Kind = kind;
+            HasRequestInFlight = hasRequestInFlight;
+            Confirmation = confirmation;
+        }
+
+        public static PresentationNotification RequestState(bool hasRequestInFlight)
+        {
+            return new PresentationNotification(
+                PresentationNotificationKind.RequestInFlightChanged,
+                hasRequestInFlight,
+                default);
+        }
+
+        public static PresentationNotification Transfer(in LootTransferConfirmation confirmation)
+        {
+            return new PresentationNotification(
+                PresentationNotificationKind.TransferConfirmed,
+                false,
+                confirmation);
+        }
+    }
+
+    private sealed class PresentationNotificationQueue
+    {
+        private const int Capacity = 8;
+
+        private readonly PresentationNotification[] _items = new PresentationNotification[Capacity];
+        private int _head;
+        private int _count;
+
+        public bool TryEnqueue(in PresentationNotification notification)
+        {
+            if (_count >= Capacity)
+            {
+                return false;
+            }
+
+            int index = (_head + _count) % Capacity;
+            _items[index] = notification;
+            _count++;
+            return true;
+        }
+
+        public bool TryDequeue(out PresentationNotification notification)
+        {
+            if (_count == 0)
+            {
+                notification = default;
+                return false;
+            }
+
+            notification = _items[_head];
+            _items[_head] = default;
+            _head = (_head + 1) % Capacity;
+            _count--;
+            return true;
+        }
+
+        public void Clear()
+        {
+            Array.Clear(_items, 0, _items.Length);
+            _head = 0;
+            _count = 0;
+        }
     }
 
     private static bool WasAccepted(in RpcInvokeInfo invokeInfo)

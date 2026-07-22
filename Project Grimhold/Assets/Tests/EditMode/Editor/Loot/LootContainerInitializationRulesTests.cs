@@ -38,7 +38,7 @@ namespace Tests.EditMode.Loot
             SetCatalog(coin);
 
             bool valid = LootContainerInitializationRules.TryBuild(
-                null,
+                (IReadOnlyList<LootContainerInitialEntry>)null,
                 _catalog,
                 4,
                 NetworkLootContainer.MaxLootTypes,
@@ -127,6 +127,33 @@ namespace Tests.EditMode.Loot
 
             Assert.That(valid, Is.False);
             Assert.That(entries, Is.Empty);
+        }
+
+        [Test]
+        public void RuntimeEntries_AcceptIntMaxValueAndReturnNoPartialOutputOnFailure()
+        {
+            LootDefinition coin = CreateDefinition("coin");
+            SetCatalog(coin);
+
+            bool valid = LootContainerInitializationRules.TryBuild(
+                new[] { new LootEntry(coin.LootId, int.MaxValue) },
+                _catalog,
+                1,
+                NetworkLootContainer.MaxLootTypes,
+                out IReadOnlyList<KeyValuePair<int, int>> entries,
+                out string error);
+            bool invalid = LootContainerInitializationRules.TryBuild(
+                new[] { new LootEntry(coin.LootId, 0) },
+                _catalog,
+                1,
+                NetworkLootContainer.MaxLootTypes,
+                out IReadOnlyList<KeyValuePair<int, int>> invalidEntries,
+                out _);
+
+            Assert.That(valid, Is.True, error);
+            Assert.That(entries[0].Value, Is.EqualTo(int.MaxValue));
+            Assert.That(invalid, Is.False);
+            Assert.That(invalidEntries, Is.Empty);
         }
 
         private LootDefinition CreateDefinition(string id)

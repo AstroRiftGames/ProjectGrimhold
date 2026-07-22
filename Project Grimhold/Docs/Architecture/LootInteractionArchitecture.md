@@ -4,15 +4,16 @@
 
 Loot movement uses `LootEntry` as its only runtime stack and `LootId` as its domain identity. `LootDefinitionCatalog` assigns deterministic indices by ordinal ID order. Fusion transports and replicates catalog indices and quantities; every peer resolves static names, icons, rarity and value locally.
 
-TASK-33 adds a reusable synchronized source and an authoritative full-stack transfer adapter. It deliberately adds no container UI, `IInteractable`, partial transfers, global coordinator, static service, networked mailbox or networked request cache.
+TASK-33 adds a reusable synchronized source and an authoritative full-stack transfer adapter. TASK-34 composes that source with a separate `IInteractable` adapter and local presentation for selective full-stack looting. It adds no partial transfer, global coordinator, static service, networked inspection session, networked mailbox or networked request cache.
 
 ## Components and responsibilities
 
-- `NetworkLootContainer` owns replicated container contents, initialization, runtime availability and change sequence. It implements `ILootExtractor`, `ILootQuantityReader`, `ILootContentReader` and `ILootSlotCapacityReader`, but not `ILootReceiver` or `IInteractable`.
+- `NetworkLootContainer` owns replicated container contents, initialization, runtime availability, change sequence and the registry mapping for its loot capabilities and colliders. It implements `ILootExtractor`, `ILootQuantityReader`, `ILootContentReader` and `ILootSlotCapacityReader`, but not `ILootReceiver` or `IInteractable`.
+- `NetworkLootContainerInteractable` shares the container root and `NetworkObject`, derives the same `EntityId`, and owns only its independently registered `IInteractable` capability. It never registers colliders or changes loot state.
 - `PlayerLootReceiver` remains the only temporary player inventory. Its validators own expected gameplay rejection; its commits apply a previously validated request.
 - `LootTransferTransaction` performs `ValidateExtraction -> ValidateReceive -> CommitExtraction -> CommitReceive` synchronously. It performs no entity resolution, catalog lookup, range calculation or presentation.
 - `PlayerLootTransferNetworkController` is the Fusion integration boundary on the player object. Input Authority sends an intention; State Authority derives requester, destination, full quantity, range and tick, then executes the transaction.
-- `EntityRegistry` remains runner-scoped. A grouped loot-source registration atomically publishes extractor, quantity reader and associated colliders.
+- `EntityRegistry` remains runner-scoped. A grouped loot-source registration atomically publishes extractor, quantity reader and associated colliders. Independent interactable registration composes with that source in either lifecycle order and removes only the expected owner.
 - `LootContainerTransferDebugHarness` is separate development tooling. It is not attached to production player prefabs or scenes.
 
 ## Sources of truth and network authority
@@ -26,7 +27,9 @@ IsAvailable
 LootChangeSequence
 ```
 
-`IsEmpty` and occupied slots are derived. Initial configuration is fully validated before any stack is written and is then loaded in catalog-index order. State Authority registers the initialized source. If grouped registration fails, no partial registry entries remain; valid contents and `IsInitialized` are preserved while `IsAvailable` stays false.
+`IsEmpty` and occupied slots are derived. Initial configuration is fully validated before any stack is written and is then loaded in catalog-index order. State Authority alone initializes content and writes availability. A container with no requested override uses its serialized `LootContainerInitialEntry` values; an authoritative pre-spawn override uses its materialized `LootEntry` values; a rejected override fails closed and never falls back to manual content. Every peer registers the source and colliders locally for runner-scoped discovery, including before its replicated snapshot observes initialization. Proxy registration grants neither extraction authority nor mutation access; authoritative validation and commits still require State Authority. If grouped registration fails on State Authority, no partial registry entries remain and availability stays false.
+
+Generated chests use `LootContainerContentTable` as stable configuration. `NetworkSpawnManager` validates it into an immutable snapshot containing catalog indices, integer weights and amount ranges, then performs weighted selection without replacement through a local SplitMix64-based roller. Weight mapping uses integer rejection sampling rather than floating point or global `UnityEngine.Random`. The result is ordered by catalog index and applied through Fusion's `OnBeforeSpawned` callback before `NetworkLootContainer.Spawned` publishes the synchronized dictionary. Seeds and overrides remain local and non-networked; late joiners consume the existing snapshot.
 
 `SetAvailability(bool)` requires State Authority. Enabling requires successful initialization and registration. Repeating a value is idempotent. Availability changes neither contents, registration, despawn state nor `LootChangeSequence`. `ValidateExtraction` returns `ContainerUnavailable` when the source cannot participate.
 
@@ -46,13 +49,15 @@ catalog index
 request sequence
 ```
 
-Input Authority permits one legitimate request in flight. A locally rejected second request neither sends an RPC nor advances sequence. Matching confirmation or transport rejection releases it; despawn/session restart clears it.
+Input Authority permits one legitimate request in flight. `HasRequestInFlight` is the only local pending source of truth. A locally rejected second request neither sends an RPC nor advances sequence. Matching confirmation or transport rejection releases it immediately; despawn/session restart clears it.
 
 State Authority stores one local, non-networked pending identity and never overwrites it. It distinguishes an exact pending duplicate, conflicting payload with the same sequence, a different sequence while busy, an exact duplicate of the last processed request, and stale input. Pending is consumed only by `FixedUpdateNetwork`. Only the last processed identity and confirmation are cached; an exact processed duplicate resends that confirmation without executing gameplay.
 
 The confirmation RPC contains only sequence, source/destination integer IDs, catalog index, transferred amount, success, failure reason integer and simulation tick. Input Authority first verifies sequence, then releases matching in-flight state before validating the rest of the envelope. A malformed matching payload is diagnosed without blocking later requests. An unknown sequence releases nothing and publishes no gameplay.
 
 `LootTransferConfirmation` belongs to the adapter layer. It always preserves primitive identity, index, tick and `LootTransferResult`; resolved `LootId` metadata is optional. Success requires positive amount, `None` and a resolvable catalog entry. A valid rejection such as `InvalidLoot` can be published without local metadata.
+
+Presentation notification is deferred through one bounded local queue. RPC and simulation callbacks may update `HasRequestInFlight`, but they do not invoke presenters. `Render` publishes a changed pending value once and then the corresponding confirmation, preserving `RequestInFlightChanged(false) -> TransferConfirmed`. Transport rejection publishes only finalization. Reset and despawn discard queued presentation without callbacks or history growth.
 
 ## Range and competition
 
@@ -66,12 +71,16 @@ Fusion simulation processes authoritative requests serially. The first complete 
 
 ## Prefabs and development validation
 
-`NetworkPlayer.prefab` contains `PlayerLootTransferNetworkController` and no debug component. `LootContainer.prefab` contains `NetworkObject`, `NetworkLootContainer`, a layer-8 collider and a presentation-only provisional visual. Initial stacks remain Inspector configuration.
+`NetworkPlayer.prefab` contains `PlayerLootTransferNetworkController` and no debug component. `LootContainer.prefab` contains one `NetworkObject`, `NetworkLootContainer`, `NetworkLootContainerInteractable`, enabled `LootContainerRandomContentConfig`, local prompt metadata, a layer-8 collider and its provisional visual. Its serialized manual stacks remain an empty development fallback; the production spawn path requires a valid random table.
+
+Gameplay's authoritative `NetworkSpawnManager` consumes only the `SpawnGroupType.Loot` scene group and spawns `LootContainer.prefab` at ordered, unique points without Input Authority. It owns one local session seed and derives each chest seed from session, scene-load generation and point index. It validates and rolls content before calling Fusion, applies the materialized override in `OnBeforeSpawned`, and records the point only after callback application, initialization and availability are confirmed. A failed returned object is despawned immediately and does not consume the point, so a retry uses the same deterministic seed without leaving an orphan. The spawn generation remains runner-scoped and idempotent; requests beyond available points are clamped rather than overlapped. Unsupported NPC, boss and miscellaneous groups are skipped and never receive an enemy fallback.
+
+`LootCorpse.prefab` remains a manual visual/configuration variant for testing. It inherits the random-content component in a disabled state with no active table, uses serialized manual entries, is not referenced by `NetworkSpawnManager`, is not spawned from death, and receives no inventory-copy behavior.
 
 `Assets/Prefabs/Debug/LootContainerTransferDebugHarness.prefab` can be placed manually in a graybox. In Editor or Development Build it resolves the local player through `TryGetPlayerObject`, detects nearby containers directly from colliders, reads their snapshot and invokes the public or raw debug transport methods. F8 sends the public full-stack request; F9 repeats its exact envelope; F10 reuses its sequence with a conflicting catalog index; F11 sends a different sequence while the legitimate request is in flight; and F12 queues an availability toggle that only succeeds on the peer holding State Authority and is applied by the container in `FixedUpdateNetwork`. Press F8 together with F9, F10 or F11 to guarantee both envelopes arrive before the next simulation tick. In a non-development release the class remains loadable but disables itself and performs no input or searches.
 
 ## Risks and validation
 
-Catalogs must be identical across peers because transport indices are catalog-local. Invalid success envelopes are rejected at the transport boundary. Registry conflicts leave containers initialized but intentionally unavailable and must be fixed as configuration/integration errors.
+Catalogs must be identical across peers because transport indices are catalog-local. Invalid success envelopes are rejected at the transport boundary. Missing/disabled random configuration, invalid tables, weight overflow and impossible capacities skip only the Loot group. A callback or initialization failure triggers authoritative compensating despawn. Registry conflicts leave containers unavailable and therefore invalidate the production spawn instead of leaving an orphan.
 
 Automated coverage targets initialization rules, registry atomicity, transaction order, queue/idempotency semantics and prefab composition. Host/Client placement, range, capacity, competition, availability, feedback and session cleanup still require the manual development harness flow.

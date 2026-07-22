@@ -74,13 +74,25 @@ This contract defines how candidates are found in the 2D world. `Physics2DIntera
 
 `LocalInteractionCandidateSource` runs `InteractionResolver.TrySelect` during `Render` only for the player with Input Authority. It exposes a read-only local candidate for the predictive prompt. This prompt does not guarantee acceptance and does not synchronize text or visual resources.
 
+For a changed candidate, the source resolves the exact runner-local `NetworkObject` and reads optional `InteractionPromptMetadata` once. The cached local text remains until the target or resolved instance changes; missing metadata falls back to `Interactuar`. Candidate loss, disable, despawn or a runner/session change clears the cache. Metadata never enters `EntityRegistry`, gameplay contracts or network state.
+
 Every interaction press processed by State Authority increments `InteractionSequence`, including disabled control, unavailable interactor, and missing-target failures. The result retains target, tick, success, consumption, and its typed failure reason.
 
 State Authority sends each result through a reliable RPC directed to Input Authority. The RPC handler only queues the payload; `PlayerInteractionNetworkController.Render` publishes `InteractionResolved`. The presenter deduplicates by sequence, ignores initial replicated state, and resets when bound to a player object from a new session.
 
 `LocalPlayerHudBinder` enables the prefab HUD only when `HasInputAuthority`. Proxies, animations, and views do not execute interactions or modify authoritative state.
 
-## 4. Loot pickup integration
+## 4. Loot-container interaction adapter
+
+`NetworkLootContainerInteractable` is a same-root adapter over `NetworkLootContainer`. Both must share exactly one `NetworkObject` and therefore one `EntityId`. The container owns loot-source and collider registration; the adapter independently registers only `IInteractable`, accepting either spawn order. Expected-instance unregistration means either despawn order preserves the other capability and an obsolete owner cannot remove a later instance.
+
+The adapter accepts initialized and available containers even when empty. `Interact` runs only under State Authority, returns a successful non-consumed result, and never changes contents, availability, `LootChangeSequence` or object lifecycle. Invalid prefab composition is diagnosed once and disabled.
+
+The confirmed event is only an opening signal. `RaidInventoryPresenter` requires the exact adapter/container composition and registry mapping before entering loot mode; merely finding a container on another successful interactable is insufficient. It deduplicates sequences per bound player object and advances its baseline even for failures, while a failed result leaves the current mode unchanged.
+
+When in loot mode, a subsequent press of the interaction input raises `PlayerInputReader.InteractPressedLocally`. `RaidInventoryPresenter` catches this local event to close the UI immediately without executing gameplay, sending RPCs, calling `Interact()`, or modifying container state. The closing press is consumed locally and suppressed from network transport.
+
+## 5. Loot pickup integration
 
 `NetworkLootPickup` implements `IInteractable` while preserving a strict reservation transaction:
 

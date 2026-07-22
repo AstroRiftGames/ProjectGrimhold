@@ -15,6 +15,13 @@ public sealed class NetworkLootContainer : NetworkBehaviour,
     ILootContentReader,
     ILootSlotCapacityReader
 {
+    private enum InitialContentOverrideState
+    {
+        NotRequested,
+        Applied,
+        Rejected
+    }
+
     public const int MaxLootTypes = 64;
 
     [SerializeField]
@@ -42,6 +49,9 @@ public sealed class NetworkLootContainer : NetworkBehaviour,
     public int LootChangeSequence { get; private set; }
 
     private Collider2D[] _cachedColliders;
+    private LootEntry[] _initialContentOverride;
+    private InitialContentOverrideState _initialContentOverrideState;
+    private bool _spawnedStarted;
     private EntityRegistry _registry;
     private EntityId _registeredId;
     private bool _isRegistered;
@@ -52,6 +62,8 @@ public sealed class NetworkLootContainer : NetworkBehaviour,
 
     public new EntityId Id => Object != null ? new EntityId(unchecked((int)Object.Id.Raw)) : default;
     public int SlotCapacity => _slotCapacity;
+    public LootDefinitionCatalog LootCatalog => _lootCatalog;
+    public bool StartsAvailable => _startsAvailable;
     public int OccupiedSlotCount => LootInventory.Count;
     public bool IsEmpty => LootInventory.Count == 0;
 
@@ -62,32 +74,59 @@ public sealed class NetworkLootContainer : NetworkBehaviour,
 
     public override void Spawned()
     {
-        if (!HasStateAuthority)
-        {
-            return;
-        }
+        _spawnedStarted = true;
 
-        if (!LootContainerInitializationRules.TryBuild(
-                _initialContent,
-                _lootCatalog,
-                _slotCapacity,
-                MaxLootTypes,
-                out IReadOnlyList<KeyValuePair<int, int>> resolvedEntries,
-                out string error))
+        if (HasStateAuthority)
         {
-            Debug.LogError($"{nameof(NetworkLootContainer)}: Invalid initial configuration on {name}. {error}", this);
-            return;
-        }
+            if (_initialContentOverrideState == InitialContentOverrideState.Rejected)
+            {
+                Debug.LogError(
+                    $"{nameof(NetworkLootContainer)}: The requested initial-content override was rejected for '{name}'. Manual content will not be used as a fallback.",
+                    this);
+                return;
+            }
 
-        NetworkDictionary<int, int> inventory = LootInventory;
-        for (int i = 0; i < resolvedEntries.Count; i++)
-        {
-            KeyValuePair<int, int> entry = resolvedEntries[i];
-            inventory.Set(entry.Key, entry.Value);
-        }
+            bool initialized;
+            IReadOnlyList<KeyValuePair<int, int>> resolvedEntries;
+            string error;
+            if (_initialContentOverrideState == InitialContentOverrideState.Applied)
+            {
+                initialized = LootContainerInitializationRules.TryBuild(
+                    _initialContentOverride,
+                    _lootCatalog,
+                    _slotCapacity,
+                    MaxLootTypes,
+                    out resolvedEntries,
+                    out error);
+            }
+            else
+            {
+                initialized = LootContainerInitializationRules.TryBuild(
+                    _initialContent,
+                    _lootCatalog,
+                    _slotCapacity,
+                    MaxLootTypes,
+                    out resolvedEntries,
+                    out error);
+            }
 
-        IsInitialized = true;
-        IsAvailable = false;
+            _initialContentOverride = null;
+            if (!initialized)
+            {
+                Debug.LogError($"{nameof(NetworkLootContainer)}: Invalid initial configuration on {name}. {error}", this);
+                return;
+            }
+
+            NetworkDictionary<int, int> inventory = LootInventory;
+            for (int i = 0; i < resolvedEntries.Count; i++)
+            {
+                KeyValuePair<int, int> entry = resolvedEntries[i];
+                inventory.Set(entry.Key, entry.Value);
+            }
+
+            IsInitialized = true;
+            IsAvailable = false;
+        }
 
         _registry = Runner.GetComponent<EntityRegistry>();
         _registeredId = Id;
@@ -100,7 +139,51 @@ public sealed class NetworkLootContainer : NetworkBehaviour,
         }
 
         _isRegistered = true;
-        IsAvailable = _startsAvailable;
+        if (HasStateAuthority)
+        {
+            IsAvailable = _startsAvailable;
+        }
+    }
+
+    /// <summary>
+    /// Materializes a validated initial-content override during Fusion's server-only pre-spawn callback.
+    /// The caller guarantees callback timing; this method independently verifies the runner, expected instance
+    /// and local lifecycle without consulting authority properties that are not yet initialized.
+    /// </summary>
+    internal bool TrySetInitialContentOverride(
+        NetworkRunner runner,
+        NetworkObject expectedObject,
+        IReadOnlyList<LootEntry> entries)
+    {
+        if (_spawnedStarted || _initialContentOverrideState != InitialContentOverrideState.NotRequested)
+        {
+            return false;
+        }
+
+        if (runner == null || !runner.IsServer || expectedObject == null ||
+            expectedObject.gameObject != gameObject ||
+            expectedObject.GetComponent<NetworkLootContainer>() != this || entries == null)
+        {
+            _initialContentOverrideState = InitialContentOverrideState.Rejected;
+            return false;
+        }
+
+        var materialized = new LootEntry[entries.Count];
+        for (int i = 0; i < entries.Count; i++)
+        {
+            LootEntry entry = entries[i];
+            if (!entry.IsValid)
+            {
+                _initialContentOverrideState = InitialContentOverrideState.Rejected;
+                return false;
+            }
+
+            materialized[i] = entry;
+        }
+
+        _initialContentOverride = materialized;
+        _initialContentOverrideState = InitialContentOverrideState.Applied;
+        return true;
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
@@ -112,6 +195,7 @@ public sealed class NetworkLootContainer : NetworkBehaviour,
 
         _isRegistered = false;
         _registry = null;
+        _initialContentOverride = null;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         _hasQueuedDebugAvailability = false;
 #endif

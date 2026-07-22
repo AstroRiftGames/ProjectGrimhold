@@ -12,6 +12,9 @@ GameObject:
   - component: {fileID: 3300000000000000003}
   - component: {fileID: 3300000000000000004}
   - component: {fileID: 3300000000000000005}
+  - component: {fileID: 3300000000000000006}
+  - component: {fileID: 3300000000000000007}
+  - component: {fileID: 3300000000000000008}
   m_Layer: 8
   m_Name: LootContainer
   m_TagString: Untagged
@@ -45,7 +48,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
   SortKey: 1518405591
   SendPriority: 1
@@ -54,6 +57,7 @@ MonoBehaviour:
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 3300000000000000004}
+  - {fileID: 3300000000000000006}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &3300000000000000004
 MonoBehaviour:
@@ -65,7 +69,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d440413878da7c24783936e9793afbb3, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkLootContainer
   _lootCatalog: {fileID: 11400000, guid: f11f98d3ce1283d47adcf8bc420f88a2, type: 2}
   _slotCapacity: 16
@@ -122,6 +126,44 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 1.1, y: 0.8}
   m_EdgeRadius: 0
+--- !u!114 &3300000000000000006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3300000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47e8bd94cbbf4a7aa8df4b8730b1be63, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkLootContainerInteractable
+--- !u!114 &3300000000000000007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3300000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21db0beaf3cc4a7b86d572c82d706f81, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::InteractionPromptMetadata
+  _promptText: Abrir cofre
+--- !u!114 &3300000000000000008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3300000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 431f074a18be4793a761ccb743377ae9, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::LootContainerRandomContentConfig
+  _table: {fileID: 11400000, guid: 0a53f81a626e45a991d9362404348e49, type: 2}
 --- !u!1 &3300000000000000010
 GameObject:
   m_ObjectHideFlags: 0
@@ -201,7 +243,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 2
   m_MaskInteraction: 0
   m_Sprite: {fileID: 2058049638561703503, guid: 288f5a2bab4fbec4d885e4a80eb6ccaa, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}

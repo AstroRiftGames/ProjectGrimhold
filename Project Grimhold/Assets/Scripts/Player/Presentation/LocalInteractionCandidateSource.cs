@@ -25,9 +25,13 @@ public sealed class LocalInteractionCandidateSource : NetworkBehaviour
     private IInteractionTargetQuery _query;
     private EntityRegistry _registry;
     private bool _dependenciesValid;
+    private EntityId _metadataTargetId;
+    private NetworkObject _metadataNetworkObject;
+    private string _currentPromptText;
 
     public bool HasCandidate { get; private set; }
     public InteractionTarget CurrentCandidate { get; private set; }
+    public string CurrentPromptText => _currentPromptText;
 
     private void Awake()
     {
@@ -83,12 +87,49 @@ public sealed class LocalInteractionCandidateSource : NetworkBehaviour
             out _);
 
         CurrentCandidate = HasCandidate ? selectedTarget : default;
+        if (HasCandidate)
+        {
+            RefreshPromptMetadata(selectedTarget.TargetId);
+        }
+        else
+        {
+            ClearPromptMetadata();
+        }
     }
 
     private void ClearCandidate()
     {
         HasCandidate = false;
         CurrentCandidate = default;
+        ClearPromptMetadata();
+    }
+
+    private void RefreshPromptMetadata(EntityId targetId)
+    {
+        var networkId = new NetworkId { Raw = unchecked((uint)targetId.Value) };
+        if (Runner == null || !Runner.TryFindObject(networkId, out NetworkObject networkObject) ||
+            networkObject == null || networkObject.Id.Raw != networkId.Raw)
+        {
+            ClearPromptMetadata();
+            return;
+        }
+
+        if (_metadataTargetId == targetId && ReferenceEquals(_metadataNetworkObject, networkObject))
+        {
+            return;
+        }
+
+        _metadataTargetId = targetId;
+        _metadataNetworkObject = networkObject;
+        InteractionPromptMetadata metadata = networkObject.GetComponent<InteractionPromptMetadata>();
+        _currentPromptText = metadata != null ? metadata.PromptText : null;
+    }
+
+    private void ClearPromptMetadata()
+    {
+        _metadataTargetId = default;
+        _metadataNetworkObject = null;
+        _currentPromptText = null;
     }
 
     private void CacheDependencies()

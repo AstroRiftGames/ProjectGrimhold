@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aeed099a389008b44ad97674fa3f48c3, type: 3}
   m_Name: Coins
   m_EditorClassIdentifier: Assembly-CSharp::LootDefinition
-  _id: Coins
+  _id: coins
   _displayName: Coins
   _icon: {fileID: 21300000, guid: 1d146328d2b503e49b51da00f2533826, type: 3}
   _worldSprite: {fileID: 21300000, guid: 1d146328d2b503e49b51da00f2533826, type: 3}

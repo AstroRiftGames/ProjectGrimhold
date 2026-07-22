@@ -1,6 +1,7 @@
 using Fusion;
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Spawning;
@@ -32,9 +33,16 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
     private PlayerClassCatalog _playerClassCatalog;
     private NetworkPrefabRef[] _enemyPrefabs;
 
+    [SerializeField]
+    private NetworkPrefabRef _lootContainerPrefab;
+
     private readonly HashSet<PlayerRef> _admittedPlayers = new();
     private readonly Dictionary<PlayerRef, NetworkObject> _spawnedPlayers = new();
     private readonly List<NetworkObject> _spawnedEnemies = new();
+    private readonly InitialLootSpawnState _lootSpawnState = new();
+
+    private ulong _lootSessionSeed;
+    private bool _hasLootSessionSeed;
 
     private readonly Dictionary<SpawnGroupType, Transform[]> _spawnPointLookup = new();
 
@@ -52,6 +60,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
     /// Exposes the linked coordinator.
     /// </summary>
     public NetworkMatchController MatchController => _matchController;
+    public NetworkPrefabRef LootContainerPrefab => _lootContainerPrefab;
 
     private void Awake()
     {
@@ -64,6 +73,9 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         _admittedPlayers.Clear();
         _spawnedPlayers.Clear();
         _spawnedEnemies.Clear();
+        _lootSpawnState.Clear();
+        _lootSessionSeed = 0;
+        _hasLootSessionSeed = false;
         _spawnPointLookup.Clear();
         _matchController = null;
         _runner = null;
@@ -105,6 +117,9 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         _admittedPlayers.Clear();
         _spawnedPlayers.Clear();
         _spawnedEnemies.Clear();
+        _lootSpawnState.Clear();
+        _lootSessionSeed = 0;
+        _hasLootSessionSeed = false;
         _spawnPointLookup.Clear();
         _matchController = null;
         _sceneSpawnPointConfiguration = null;
@@ -116,6 +131,29 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         _spawnsBlocked = true;
 
         Debug.Log($"[NetworkSpawnManager] Initialized for runner: {runner.name}");
+        return true;
+    }
+
+    /// <summary>
+    /// Merges scene-owned prefab references into this runner-scoped persistent manager.
+    /// Existing launcher-owned player and enemy references remain unchanged.
+    /// </summary>
+    public bool CopyReferencesFrom(NetworkSpawnManager configuredManager)
+    {
+        if (configuredManager == null || ReferenceEquals(configuredManager, this))
+        {
+            return false;
+        }
+
+        _lootContainerPrefab = configuredManager._lootContainerPrefab;
+        if (!_lootContainerPrefab.IsValid)
+        {
+            Debug.LogError(
+                $"[NetworkSpawnManager] Scene manager '{configuredManager.name}' has no valid loot-container prefab. Loot groups will be skipped.",
+                configuredManager);
+            return false;
+        }
+
         return true;
     }
 
@@ -212,6 +250,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         // Invalidate previous scene configs and transforms immediately
         _spawnPointLookup.Clear();
         _sceneSpawnPointConfiguration = null;
+        _lootSpawnState.Clear();
 
         // Increment scene load generation to build a unique load identity
         _currentSceneLoadGeneration++;
@@ -267,7 +306,9 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
 
         // Find configurations strictly within root objects of the runnerScene and their children
         NetworkSpawnSceneConfiguration sceneConfig = null;
+        NetworkSpawnManager configuredSceneManager = null;
         int configCount = 0;
+        int configuredManagerCount = 0;
         try
         {
             GameObject[] rootObjects = runnerScene.GetRootGameObjects();
@@ -281,6 +322,16 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
                     {
                         sceneConfig = c;
                         configCount++;
+                    }
+                }
+
+                var managersInRoot = go.GetComponentsInChildren<NetworkSpawnManager>(true);
+                foreach (NetworkSpawnManager manager in managersInRoot)
+                {
+                    if (manager != null && !ReferenceEquals(manager, this) && manager.gameObject.scene == runnerScene)
+                    {
+                        configuredSceneManager = manager;
+                        configuredManagerCount++;
                     }
                 }
             }
@@ -313,6 +364,19 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             Debug.LogError($"[NetworkSpawnManager] Config '{sceneConfig.name}' belongs to a different scene. Spawning aborted.");
             FailSceneLoadPipeline();
             return;
+        }
+
+        if (configuredManagerCount > 1)
+        {
+            Debug.LogError($"[NetworkSpawnManager] Multiple scene-configured NetworkSpawnManager components found in '{runnerScene.name}'. Spawning aborted.");
+            FailSceneLoadPipeline();
+            return;
+        }
+
+        if (configuredSceneManager != null)
+        {
+            CopyReferencesFrom(configuredSceneManager);
+            Destroy(configuredSceneManager);
         }
 
         if (!sceneConfig.Validate(out string validationError))
@@ -351,17 +415,34 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
                     }
                 }
 
-                // Spawn initial enemies/entities
+                // Spawn initial scene entities through explicit group integrations.
                 if (_sceneSpawnPointConfiguration != null && _sceneSpawnPointConfiguration.SpawnGroups != null)
                 {
-                    foreach (var group in _sceneSpawnPointConfiguration.SpawnGroups)
+                    foreach (SpawnGroupDefinition group in _sceneSpawnPointConfiguration.SpawnGroups)
                     {
-                        if (group == null || group.Group == SpawnGroupType.Players)
-                            continue;
-
-                        for (int i = 0; i < group.Amount; i++)
+                        if (group == null)
                         {
-                            SpawnEnemy(runner, group.Group);
+                            continue;
+                        }
+
+                        switch (InitialSpawnGroupPolicy.Resolve(group.Group))
+                        {
+                            case InitialSpawnGroupPolicy.SpawnKind.Players:
+                                break;
+                            case InitialSpawnGroupPolicy.SpawnKind.Enemies:
+                                for (int i = 0; i < group.Amount; i++)
+                                {
+                                    SpawnEnemy(runner);
+                                }
+                                break;
+                            case InitialSpawnGroupPolicy.SpawnKind.LootContainers:
+                                SpawnConfiguredLootContainers(runner, group);
+                                break;
+                            default:
+                                Debug.LogWarning(
+                                    $"[NetworkSpawnManager] Initial spawning for group '{group.Group}' is not implemented. The group was skipped.",
+                                    this);
+                                break;
                         }
                     }
                 }
@@ -622,7 +703,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         Debug.Log($"Spawned player {player} with class {joinData.ClassId}.");
     }
 
-    private void SpawnEnemy(NetworkRunner runner, SpawnGroupType groupType)
+    private void SpawnEnemy(NetworkRunner runner)
     {
         if (_enemyPrefabs == null || _enemyPrefabs.Length <= 0)
         {
@@ -630,7 +711,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             return;
         }
         GetSpawnTransform(
-            groupType,
+            SpawnGroupType.Enemies,
             UnityEngine.Random.Range(0, int.MaxValue),
             out Vector3 position,
             out Quaternion rotation);
@@ -640,7 +721,270 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             rotation);
 
         _spawnedEnemies.Add(enemyObject);
-        Debug.Log($"Spawned enemy of group {groupType} at {position}.");
+        Debug.Log($"Spawned enemy at {position}.");
+    }
+
+    private void SpawnConfiguredLootContainers(NetworkRunner runner, SpawnGroupDefinition definition)
+    {
+        if (!_lootContainerPrefab.IsValid)
+        {
+            Debug.LogError(
+                "[NetworkSpawnManager] Loot group skipped because LootContainer.prefab is not configured on the Gameplay scene manager.",
+                this);
+            return;
+        }
+
+        if (!TryPrepareLootContentSnapshot(
+                runner,
+                out ValidatedLootContainerContentSnapshot snapshot,
+                out string preparationError))
+        {
+            Debug.LogError(
+                $"[NetworkSpawnManager] Loot group skipped because its random-content configuration is invalid. {preparationError}",
+                this);
+            return;
+        }
+
+        if (!EnsureLootSessionSeed(runner))
+        {
+            Debug.LogError("[NetworkSpawnManager] Loot group skipped because a server-owned session seed could not be created.", this);
+            return;
+        }
+
+        int spawnCount = InitialSpawnGroupPolicy.GetLootSpawnCount(definition, out bool wasClamped);
+        if (wasClamped)
+        {
+            Debug.LogWarning(
+                $"[NetworkSpawnManager] Loot group requested {definition.Amount} containers but has only {definition.SpawnPoints.Length} points. Spawning was limited to {spawnCount}.",
+                this);
+        }
+
+        for (int spawnIndex = 0; spawnIndex < spawnCount; spawnIndex++)
+        {
+            if (_lootSpawnState.ContainsPoint(spawnIndex))
+            {
+                continue;
+            }
+
+            ulong containerSeed = LootContainerSeedRules.Derive(
+                _lootSessionSeed,
+                _currentSceneLoadGeneration,
+                spawnIndex);
+            if (!LootContainerContentRoller.TryRoll(
+                    snapshot,
+                    containerSeed,
+                    out IReadOnlyList<LootEntry> rolledContent,
+                    out string rollError))
+            {
+                Debug.LogError(
+                    $"[NetworkSpawnManager] Loot roll failed for point {spawnIndex}, generation {_currentSceneLoadGeneration}, seed {containerSeed}. {rollError}",
+                    this);
+                continue;
+            }
+
+            NetworkObject lootContainer = SpawnLootContainer(
+                runner,
+                SpawnGroupType.Loot,
+                spawnIndex,
+                containerSeed,
+                rolledContent,
+                out bool fatalIntegrationFailure);
+            if (lootContainer == null)
+            {
+                if (fatalIntegrationFailure)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            _lootSpawnState.TryRecordSuccessfulSpawn(spawnIndex, lootContainer);
+        }
+    }
+
+    private NetworkObject SpawnLootContainer(
+        NetworkRunner runner,
+        SpawnGroupType group,
+        int spawnIndex,
+        ulong containerSeed,
+        IReadOnlyList<LootEntry> rolledContent,
+        out bool fatalIntegrationFailure)
+    {
+        fatalIntegrationFailure = false;
+        if (runner == null || runner != _runner || !runner.IsServer ||
+            group != SpawnGroupType.Loot || !_lootContainerPrefab.IsValid || rolledContent == null)
+        {
+            return null;
+        }
+
+        GetSpawnTransform(group, spawnIndex, out Vector3 position, out Quaternion rotation);
+        bool callbackApplied = false;
+        NetworkObject callbackObject = null;
+        NetworkLootContainer callbackContainer = null;
+        NetworkObject lootContainer = runner.Spawn(
+            _lootContainerPrefab,
+            position,
+            rotation,
+            inputAuthority: null,
+            onBeforeSpawned: (callbackRunner, instance) =>
+            {
+                callbackObject = instance;
+                callbackContainer = instance != null
+                    ? instance.GetComponent<NetworkLootContainer>()
+                    : null;
+                callbackApplied = callbackContainer != null &&
+                    callbackContainer.TrySetInitialContentOverride(
+                        callbackRunner,
+                        instance,
+                        rolledContent);
+            });
+
+        if (lootContainer == null)
+        {
+            Debug.LogError(
+                $"[NetworkSpawnManager] Loot container spawn failed at point {spawnIndex}, position {position}.",
+                this);
+            return null;
+        }
+
+        bool initializedSuccessfully = lootContainer.Id.IsValid &&
+            ReferenceEquals(callbackObject, lootContainer) &&
+            callbackContainer != null &&
+            callbackContainer.Object == lootContainer &&
+            callbackApplied &&
+            callbackContainer.IsInitialized &&
+            callbackContainer.IsAvailable;
+
+        if (!initializedSuccessfully)
+        {
+            Debug.LogError(
+                $"[NetworkSpawnManager] Loot container initialization failed at point {spawnIndex}, position {position}, seed {containerSeed}. " +
+                $"objectValid={lootContainer.Id.IsValid}, callbackApplied={callbackApplied}, " +
+                $"initialized={callbackContainer != null && callbackContainer.IsInitialized}, " +
+                $"available={callbackContainer != null && callbackContainer.IsAvailable}. The instance will be despawned.",
+                lootContainer);
+
+            if (lootContainer.Id.IsValid)
+            {
+                NetworkId spawnedId = lootContainer.Id;
+                try
+                {
+                    runner.Despawn(lootContainer);
+                    if (runner.TryFindObject(spawnedId, out NetworkObject remainingObject) &&
+                        ReferenceEquals(remainingObject, lootContainer))
+                    {
+                        fatalIntegrationFailure = true;
+                        Debug.LogError(
+                            $"[NetworkSpawnManager] Compensating despawn did not remove loot object {spawnedId}. Remaining Loot points will not be processed.",
+                            lootContainer);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    fatalIntegrationFailure = true;
+                    Debug.LogException(exception, lootContainer);
+                    Debug.LogError(
+                        $"[NetworkSpawnManager] Compensating despawn failed for loot object {spawnedId}. Remaining Loot points will not be processed.",
+                        lootContainer);
+                }
+            }
+
+            return null;
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log(
+            $"[NetworkSpawnManager] Loot roll generation={_currentSceneLoadGeneration}, point={spawnIndex}, sessionSeed={_lootSessionSeed}, containerSeed={containerSeed}.",
+            lootContainer);
+#endif
+        Debug.Log(
+            $"[NetworkSpawnManager] Spawned loot container at point {spawnIndex}, position {position}.",
+            lootContainer);
+        return lootContainer;
+    }
+
+    private bool TryPrepareLootContentSnapshot(
+        NetworkRunner runner,
+        out ValidatedLootContainerContentSnapshot snapshot,
+        out string error)
+    {
+        snapshot = null;
+        error = null;
+
+        if (runner == null || runner != _runner || !runner.IsServer || runner.Config == null)
+        {
+            error = "Runner is missing, mismatched, or lacks server authority.";
+            return false;
+        }
+
+        NetworkPrefabId prefabId = runner.Config.PrefabTable.GetId((NetworkObjectGuid)_lootContainerPrefab);
+        if (!prefabId.IsValid)
+        {
+            error = "The configured loot prefab is not registered in Fusion's prefab table.";
+            return false;
+        }
+
+        NetworkObject prefabObject = runner.Config.PrefabTable.Load(prefabId, true);
+        if (prefabObject == null)
+        {
+            error = "Fusion could not synchronously resolve the configured loot prefab.";
+            return false;
+        }
+
+        NetworkLootContainer container = prefabObject.GetComponent<NetworkLootContainer>();
+        LootContainerRandomContentConfig randomConfig = prefabObject.GetComponent<LootContainerRandomContentConfig>();
+        if (container == null)
+        {
+            error = "The configured loot prefab has no NetworkLootContainer on its root.";
+            return false;
+        }
+
+        if (randomConfig == null || !randomConfig.enabled)
+        {
+            error = "The configured loot prefab has no enabled random-content configuration on its root.";
+            return false;
+        }
+
+        if (!container.StartsAvailable)
+        {
+            error = "The production loot prefab must start available after successful initialization.";
+            return false;
+        }
+
+        return LootContainerContentTableValidation.TryCreateSnapshot(
+            randomConfig.Table,
+            container.LootCatalog,
+            container.SlotCapacity,
+            NetworkLootContainer.MaxLootTypes,
+            out snapshot,
+            out error);
+    }
+
+    private bool EnsureLootSessionSeed(NetworkRunner runner)
+    {
+        if (_hasLootSessionSeed)
+        {
+            return true;
+        }
+
+        if (runner == null || runner != _runner || !runner.IsServer)
+        {
+            return false;
+        }
+
+        var bytes = new byte[sizeof(ulong)];
+        using (RandomNumberGenerator generator = RandomNumberGenerator.Create())
+        {
+            generator.GetBytes(bytes);
+        }
+
+        _lootSessionSeed = BitConverter.ToUInt64(bytes, 0);
+        _hasLootSessionSeed = true;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"[NetworkSpawnManager] Created authoritative loot session seed {_lootSessionSeed}.", this);
+#endif
+        return true;
     }
 
     public override void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
@@ -668,6 +1012,9 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             _admittedPlayers.Clear();
             _spawnedPlayers.Clear();
             _spawnedEnemies.Clear();
+            _lootSpawnState.Clear();
+            _lootSessionSeed = 0;
+            _hasLootSessionSeed = false;
             _spawnPointLookup.Clear();
             _matchController = null;
             _runner = null;
@@ -742,6 +1089,12 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             return null;
         }
 
+        if (group == SpawnGroupType.Loot || prefab == _lootContainerPrefab)
+        {
+            Debug.LogError("[NetworkSpawnManager] The configured random loot container must use the dedicated initial Loot spawn pipeline.", this);
+            return null;
+        }
+
         if (!CanUseCurrentSceneSpawnPoints(_runner))
         {
             Debug.LogError("[NetworkSpawnManager] Spawn failed: Scene spawn points are unavailable or blocked.");
@@ -765,6 +1118,12 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         Vector3 position,
         Quaternion rotation)
     {
+        if (prefab == _lootContainerPrefab)
+        {
+            Debug.LogError("[NetworkSpawnManager] The configured random loot container cannot bypass its dedicated initial-content pipeline.", this);
+            return null;
+        }
+
         if (!CanSpawnAtExplicitTransform(_runner))
         {
             Debug.LogError("[NetworkSpawnManager] Spawn failed: Runner is not initialized or lacks authority.");

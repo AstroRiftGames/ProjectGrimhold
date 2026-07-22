@@ -56,6 +56,32 @@ namespace Tests.EditMode.Player
             Assert.That(ReadSuppressionCount(), Is.Zero);
         }
 
+        [Test]
+        public void CallbackReentrancy_DoesNotLeakInteractButtonToPendingInputWhenReleasedInCallback()
+        {
+            IDisposable suppression = _reader.AcquireGameplayInputSuppression();
+            _reader.InteractPressedLocally += () => suppression.Dispose();
+
+            InvokeOnInteractPerformed();
+
+            Assert.That(_reader.ConsumeNetworkInput().Buttons.IsSet(PlayerInputButton.Interact), Is.False);
+        }
+
+        [Test]
+        public void NestedSuppressions_ReleasingOneTokenKeepsGameplaySuppressedAndDoesNotTransportInteract()
+        {
+            IDisposable first = _reader.AcquireGameplayInputSuppression();
+            IDisposable second = _reader.AcquireGameplayInputSuppression();
+
+            _reader.InteractPressedLocally += () => first.Dispose();
+
+            InvokeOnInteractPerformed();
+
+            Assert.That(ReadSuppressionCount(), Is.EqualTo(1));
+            Assert.That(_reader.ConsumeNetworkInput().Buttons.IsSet(PlayerInputButton.Interact), Is.False);
+            second.Dispose();
+        }
+
         private int ReadSuppressionCount()
         {
             FieldInfo field = typeof(PlayerInputReader).GetField(
@@ -63,6 +89,15 @@ namespace Tests.EditMode.Player
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null);
             return (int)field.GetValue(_reader);
+        }
+
+        private void InvokeOnInteractPerformed()
+        {
+            MethodInfo method = typeof(PlayerInputReader).GetMethod(
+                "OnInteractPerformed",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(_reader, new object[] { default(UnityEngine.InputSystem.InputAction.CallbackContext) });
         }
 
         private void InvokeLifecycle(string methodName)

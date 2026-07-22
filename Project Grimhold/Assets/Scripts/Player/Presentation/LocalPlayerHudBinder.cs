@@ -29,6 +29,9 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
     [SerializeField]
     private PlayerLootReceiver _lootReceiver;
 
+    [SerializeField]
+    private PlayerLootTransferNetworkController _lootTransferController;
+
     private bool _isBound;
     private LocalInputContext _inputContext;
 
@@ -41,6 +44,14 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
         }
 
         BindLocalHud();
+    }
+
+    private void OnEnable()
+    {
+        if (Object != null && Object.IsValid && HasInputAuthority)
+        {
+            BindLocalHud();
+        }
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
@@ -67,7 +78,8 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
 
         if (_hudRoot == null || _interactionPresenter == null || _lootPresenter == null ||
             _inventoryPresenter == null ||
-            _candidateSource == null || _interactionController == null || _lootReceiver == null)
+            _candidateSource == null || _interactionController == null || _lootReceiver == null ||
+            _lootTransferController == null)
         {
             Debug.LogError($"{nameof(LocalPlayerHudBinder)} has missing HUD dependencies.", this);
             SetHudActive(false);
@@ -127,7 +139,13 @@ public sealed class LocalPlayerHudBinder : NetworkBehaviour
         _inventoryPresenter.Unbind();
         if (inputReader != null)
         {
-            _inventoryPresenter.Bind(_lootReceiver, inputReader);
+            _inventoryPresenter.Bind(
+                _lootReceiver,
+                inputReader,
+                _interactionController,
+                _lootTransferController,
+                Runner,
+                transform);
         }
     }
 

@@ -2,7 +2,7 @@
 
 ## Context and decision
 
-TASK-32 replaces the provisional textual loot summary with a local, read-only uGUI slot screen. `PlayerLootReceiver` remains the only inventory source of truth and State Authority remains the only writer.
+TASK-32 replaces the provisional textual loot summary with a local uGUI slot screen. TASK-34 composes the player inventory and an inspected `NetworkLootContainer` in the same local screen. Each network endpoint remains the source of truth for its own snapshot and State Authority remains the only writer.
 
 The local presentation flow is:
 
@@ -11,11 +11,12 @@ PlayerLootReceiver
     -> snapshot, capacity, LootChangeSequence and local metadata
     -> RaidInventoryPresenter
     -> RaidInventoryProjection
-    -> RaidInventoryView
+    -> RaidLootPanelPresenter / RaidInventoryView
+    -> RaidLootPanelView
     -> RaidInventorySlotView
 ```
 
-The presenter calls only `TryGetLootContent`, `SlotCapacity`, `LootChangeSequence`, `TryResolveDefinition`, and `TryCalculateTotalValue`. It never validates or commits reception or extraction and never accesses the network dictionary directly.
+The presentation layer calls only snapshot readers, capacities, change sequences and local catalog projection. It never accesses extractors, validators, commits or network dictionaries. A slot emits only its occupied `LootId`; the orchestrator requests a complete stack through `PlayerLootTransferNetworkController`.
 
 ## Slot projection and metadata
 
@@ -23,15 +24,29 @@ The presenter calls only `TryGetLootContent`, `SlotCapacity`, `LootChangeSequenc
 
 The view creates a stable slot pool when binding or capacity changes. Normal content refreshes reuse those views. A missing icon uses the serialized project placeholder. If a complete definition cannot be resolved, only that slot degrades to the placeholder, raw `LootId` text, and replicated quantity; the presenter reports the integration error once per ID and keeps other slots visible.
 
-The screen contains a `PanelsRow` with the player panel as its only child. A future container panel may be composed as a sibling, but TASK-32 contains no container runtime, selection, transfer controls, or drag and drop.
+`PanelsRow` contains reusable sibling panels. Personal mode shows only the player panel. Loot mode shows the player read-only and the selectable container panel at full capacity, including empty slots and `Contenedor vacío`; empty content does not close the screen. TASK-34 adds no drag and drop, editable amount, multiple selection or loot-all.
+
+`RaidLootSelectionState` stores only the selected `LootId`. It clears on close or target change, preserves a selection while that stack remains in the current snapshot, and removes it when the stack disappears. It intentionally has no pending flag or controller reference. Slot interactivity is derived each time from loot mode, a valid current container, an occupied slot, and `!PlayerLootTransferNetworkController.HasRequestInFlight`.
+
+## Confirmed opening, refresh and close
+
+`RaidInventoryPresenter` remains the sole owner of mode, target, subscriptions, transfer intent, watchdog and the input-suppression token. It opens loot mode only for a strictly new successful `InteractionPresentationEvent` belonging to the bound Input Authority player. The sequence baseline is captured before subscription and replaced on enable or player-object rebind, so replicated initial state and an old session cannot reopen the UI.
+
+Opening reconstructs the target `NetworkId`, resolves the exact instance through the bound runner, requires a same-root `NetworkLootContainer` and registered `NetworkLootContainerInteractable` sharing that `NetworkObject`, and requires initialized/available state. The presenter then caches object, components and colliders. The watchdog only rechecks that instance, state and distance through cached colliders; it performs no component or global searches per frame.
+
+Player and container `LootChangeSequence` values are the definitive refresh signals, including remote transfers. `RequestInFlightChanged` only recalculates interactivity. `TransferConfirmed` always refreshes the player; it reconciles the current container and selection only when `SourceId` matches the open container. Therefore a late confirmation from A cannot alter B.
+
+Close is idempotent, releases one suppression token, clears mode, target, colliders and selection, and never cancels gameplay. Distance, target replacement/despawn, unavailable/uninitialized state, local close (via local Tab toggle or a new local interaction press edge `InteractPressedLocally`), session end, player despawn and HUD disable all close the screen. Closing and reopening while a request remains in flight observes the controller directly and keeps slots blocked.
 
 ## Local input boundary
 
-`PlayerInputReader` owns one `PlayerInputActions` instance with the normal `Gameplay` map and a local-only `LocalUI.ToggleInventory` action bound provisionally to Tab. The toggle is not part of `PlayerNetworkInput` or `PlayerInputButton`.
+`PlayerInputReader` owns one `PlayerInputActions` instance with the normal `Gameplay` map and a local-only `LocalUI.ToggleInventory` action bound provisionally to Tab. The toggle and local `InteractPressedLocally` edge notification are not part of `PlayerNetworkInput` or `PlayerInputButton`.
 
 Opening the screen acquires a small owner-specific suppression token. While any token exists, `ConsumeNetworkInput` returns `default(PlayerNetworkInput)` and discrete attack/interaction buffers are discarded. Gameplay and LocalUI action maps remain under their normal component lifecycle and are not toggled by suppression.
 
-On final release, movement and aim are read directly from the current action and pointer state so held continuous controls resume immediately. Attack and interaction that remain held must first be released; only a subsequent valid press can be transported. This prevents a button pressed behind the inventory from becoming a delayed gameplay edge.
+When `RaidInventoryPresenter` is in container looting mode (`ScreenMode.ContainerLoot`), a new local interaction press (`InteractPressedLocally`) immediately calls `Close()`. `PlayerInputReader` evaluates `wasSuppressed` before publishing `InteractPressedLocally`, preventing the closing press from being added to pending network input even if suppression is released synchronously inside the callback.
+
+On final suppression release (transition from 1 to 0 active tokens), movement and aim are read directly from current continuous controls. Any discrete action (attack or interaction) held at the moment of release sets a rearm requirement (`_interactRequiresRelease`). Physical release of the key clears the requirement regardless of suppression state, and only a subsequent physical press edge can be transported to Fusion. The same press that closes the container cannot reopen or execute a new interaction. Chests (`LootContainer`) and corpses (`LootCorpse`) share this exact local presentation logic through their common `NetworkLootContainer` and `NetworkLootContainerInteractable` composition.
 
 ## Runner-scoped binding and lifecycle
 
@@ -39,14 +54,14 @@ On final release, movement and aim are read directly from the current action and
 
 `LocalPlayerHudBinder` binds only the Input Authority player's receiver and the reader exposed by its runner context. The inventory presenter remains outside the visual screen root.
 
-- `Close` hides the screen and releases suppression while retaining binding and slots.
-- `OnDisable` closes and unsubscribes but retains receiver and reader references.
-- `OnEnable` resubscribes and rebuilds from the current snapshot without a new binder call.
-- `Unbind` releases suppression, removes subscriptions, clears references, sequence state, diagnostics, and visual content.
+- `Close` hides the screen and releases suppression while retaining binding and slot pools.
+- `OnDisable` closes and unsubscribes but retains bound dependencies for a safe re-enable.
+- `OnEnable` establishes a fresh interaction-sequence baseline, resubscribes and rebuilds from current snapshots without replaying old results.
+- `Unbind` removes listeners before releasing suppression and clearing references, sequence state, target, selection, diagnostics and visual content.
 - `OnDestroy` performs the same cleanup idempotently.
 
 Player despawn, runner shutdown, scene unload, or reader replacement therefore cannot leave local gameplay input suppressed. A later session creates a new runner context and receives a fresh player inventory.
 
 ## Validation strategy
 
-Pure tests cover projection order/capacity and slot fallback data. Input tests cover continuous restoration, discrete rearming, nested suppression, and the local toggle. Play Mode view tests cover stable slot reuse and clearing. Final binding, replication, despawn, and Host/Client isolation require manual multiplayer validation with a spawned `PlayerLootReceiver`; TASK-32 adds no new Fusion test infrastructure.
+Pure tests cover projection order/capacity, slot fallback data, selection reconciliation and registry composition. Input tests cover continuous restoration, discrete rearming, nested suppression and the local toggle. Play Mode view tests cover both panels, stable slot reuse, clearing and empty capacity. Exact Host/Client interaction confirmation, replication races, distance, despawn and local-HUD isolation remain manual multiplayer validation because the project has no automated multi-runner harness.

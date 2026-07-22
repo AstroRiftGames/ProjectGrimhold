@@ -20,6 +20,44 @@ public static class LootContainerInitializationRules
         resolvedEntries = Array.Empty<KeyValuePair<int, int>>();
         error = null;
 
+        int count = initialEntries?.Count ?? 0;
+        var normalized = new List<LootEntry>(count);
+        for (int i = 0; i < count; i++)
+        {
+            LootContainerInitialEntry entry = initialEntries[i];
+            string definitionError = null;
+            if (entry.Definition == null || !entry.Definition.TryValidate(out definitionError))
+            {
+                error = $"Initial entry {i} has no valid definition. {definitionError}";
+                return false;
+            }
+
+            normalized.Add(new LootEntry(entry.Definition.LootId, entry.Amount));
+        }
+
+        return TryBuild(
+            normalized,
+            catalog,
+            slotCapacity,
+            networkCapacity,
+            out resolvedEntries,
+            out error);
+    }
+
+    /// <summary>
+    /// Resolves already materialized runtime stacks to catalog indices without partial output on failure.
+    /// </summary>
+    public static bool TryBuild(
+        IReadOnlyList<LootEntry> initialEntries,
+        LootDefinitionCatalog catalog,
+        int slotCapacity,
+        int networkCapacity,
+        out IReadOnlyList<KeyValuePair<int, int>> resolvedEntries,
+        out string error)
+    {
+        resolvedEntries = Array.Empty<KeyValuePair<int, int>>();
+        error = null;
+
         string catalogError = null;
         if (catalog == null || !catalog.TryValidate(out catalogError))
         {
@@ -50,21 +88,14 @@ public static class LootContainerInitializationRules
         var seenIndices = new HashSet<int>();
         for (int i = 0; i < count; i++)
         {
-            LootContainerInitialEntry entry = initialEntries[i];
-            string definitionError = null;
-            if (entry.Definition == null || !entry.Definition.TryValidate(out definitionError))
+            LootEntry entry = initialEntries[i];
+            if (!entry.IsValid)
             {
-                error = $"Initial entry {i} has no valid definition. {definitionError}";
+                error = $"Initial entry {i} has an invalid loot ID or non-positive amount.";
                 return false;
             }
 
-            if (entry.Amount <= 0)
-            {
-                error = $"Initial entry {i} has a non-positive amount.";
-                return false;
-            }
-
-            if (!catalog.TryGetIndex(entry.Definition.LootId, out int catalogIndex) ||
+            if (!catalog.TryGetIndex(entry.LootId, out int catalogIndex) ||
                 catalogIndex < 0 || catalogIndex >= networkCapacity)
             {
                 error = $"Initial entry {i} is not representable by the assigned catalog.";
