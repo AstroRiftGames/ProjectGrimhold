@@ -13,6 +13,7 @@ public sealed class EntityRegistry : MonoBehaviour
     private readonly Dictionary<EntityId, IInteractable> _interactables = new();
     private readonly Dictionary<EntityId, ILootReceiver> _lootReceivers = new();
     private readonly Dictionary<Collider2D, EntityId> _colliders = new();
+    private readonly Dictionary<EntityId, IEntity> _registeredEntities = new();
 
     /// <summary>
     /// Attempts to register an entity and its associated colliders.
@@ -67,6 +68,8 @@ public sealed class EntityRegistry : MonoBehaviour
                 }
             }
         }
+
+        _registeredEntities[id] = entity;
 
         // Register contracts
         if (entity is IDamageable damageable)
@@ -177,6 +180,14 @@ public sealed class EntityRegistry : MonoBehaviour
     public bool TryGetLootReceiver(EntityId id, out ILootReceiver lootReceiver)
     {
         return _lootReceivers.TryGetValue(id, out lootReceiver);
+    }
+
+    /// <summary>
+    /// Attempts to retrieve any registered entity by its EntityId.
+    /// </summary>
+    public bool TryGetEntity(EntityId id, out IEntity entity)
+    {
+        return _registeredEntities.TryGetValue(id, out entity);
     }
 
     /// <summary>
