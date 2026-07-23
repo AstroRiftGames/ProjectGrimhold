@@ -8,8 +8,22 @@ public static class LootContainerSeedRules
     /// </summary>
     public static ulong Derive(ulong sessionSeed, int sceneLoadGeneration, int spawnPointIndex)
     {
+        return Derive(sessionSeed, sceneLoadGeneration, 0, spawnPointIndex);
+    }
+
+    /// <summary>
+    /// Derives a stable seed with a domain discriminator so different spawn groups
+    /// cannot share the same deterministic random stream for the same point index.
+    /// </summary>
+    public static ulong Derive(
+        ulong sessionSeed,
+        int sceneLoadGeneration,
+        int domain,
+        int spawnPointIndex)
+    {
         ulong identity = ((ulong)(uint)sceneLoadGeneration << 32) | (uint)spawnPointIndex;
-        return Mix(sessionSeed ^ Mix(identity));
+        ulong domainIdentity = ((ulong)(uint)domain << 32) | (uint)domain;
+        return Mix(sessionSeed ^ Mix(identity) ^ Mix(domainIdentity));
     }
 
     private static ulong Mix(ulong value)

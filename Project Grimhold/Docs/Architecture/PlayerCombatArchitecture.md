@@ -205,6 +205,12 @@ A network component that validates damage rules:
 * On `Despawned()`, they call `Unregister()` to remove these references.
 * This ensures that multiple colliders representing a single character map to the exact same `EntityId`, preventing duplicate target selection or double-damage evaluations in a single query.
 
+Non-character world targets may register the same contracts without inheriting
+`CharacterBase`. `BreakableObject` registers its Character-layer damage hitbox
+and WorldCollision blocker under one `EntityId`, accepts the ordinary
+`DamageRequest` pipeline, and removes both mappings after its authoritative
+destruction. See `Docs/Architecture/BreakableLootArchitecture.md`.
+
 ---
 
 ## Combat Presentation & Character Defeat Cycle

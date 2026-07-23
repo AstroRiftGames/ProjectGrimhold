@@ -69,6 +69,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkLootPickup
   _lootDefinition: {fileID: 11400000, guid: 0579b9c205ee88a4b8c94315d95afa5e, type: 2}
   _amount: 1
+  _lootCatalog: {fileID: 11400000, guid: f11f98d3ce1283d47adcf8bc420f88a2, type: 2}
+  _worldRenderer: {fileID: 3134618034655897849}
+  _sortingLayerName: Default
+  _sortingOrder: 2
 --- !u!212 &3134618034655897849
 SpriteRenderer:
   serializedVersion: 3

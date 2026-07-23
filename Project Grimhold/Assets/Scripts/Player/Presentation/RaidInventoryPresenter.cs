@@ -175,6 +175,7 @@ public sealed class RaidInventoryPresenter : MonoBehaviour
 
         _lastObservedInteractionSequence = _interactionController.CurrentInteractionSequence;
         _inputReader.InventoryToggleRequested += OnInventoryToggleRequested;
+        _inputReader.InventoryCloseRequested += OnInventoryCloseRequested;
         _inputReader.InteractPressedLocally += OnInteractPressedLocally;
         _interactionController.InteractionResolved += OnInteractionResolved;
         _transferController.RequestInFlightChanged += OnRequestInFlightChanged;
@@ -193,6 +194,7 @@ public sealed class RaidInventoryPresenter : MonoBehaviour
         if (_inputReader != null)
         {
             _inputReader.InventoryToggleRequested -= OnInventoryToggleRequested;
+            _inputReader.InventoryCloseRequested -= OnInventoryCloseRequested;
             _inputReader.InteractPressedLocally -= OnInteractPressedLocally;
         }
 
@@ -224,6 +226,16 @@ public sealed class RaidInventoryPresenter : MonoBehaviour
         }
 
         OpenPersonalInventory();
+    }
+
+    private void OnInventoryCloseRequested()
+    {
+        if (_mode == ScreenMode.Closed)
+        {
+            return;
+        }
+
+        Close();
     }
 
     private void OnInteractPressedLocally()

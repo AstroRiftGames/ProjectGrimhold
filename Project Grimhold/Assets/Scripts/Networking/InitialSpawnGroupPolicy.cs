@@ -12,6 +12,7 @@ public static class InitialSpawnGroupPolicy
         Players,
         Enemies,
         LootContainers,
+        Breakables,
         Unsupported
     }
 
@@ -22,19 +23,25 @@ public static class InitialSpawnGroupPolicy
             SpawnGroupType.Players => SpawnKind.Players,
             SpawnGroupType.Enemies => SpawnKind.Enemies,
             SpawnGroupType.Loot => SpawnKind.LootContainers,
+            SpawnGroupType.Breakables => SpawnKind.Breakables,
             _ => SpawnKind.Unsupported
         };
     }
 
     /// <summary>
-    /// Limits deterministic loot spawning to one object per configured point.
+    /// Limits deterministic scene spawning to one object per configured point.
     /// </summary>
-    public static int GetLootSpawnCount(SpawnGroupDefinition definition, out bool wasClamped)
+    public static int GetPointBoundedSpawnCount(SpawnGroupDefinition definition, out bool wasClamped)
     {
         int requested = Mathf.Max(0, definition?.Amount ?? 0);
         int availablePoints = definition?.SpawnPoints?.Length ?? 0;
         int spawnCount = Mathf.Min(requested, availablePoints);
         wasClamped = spawnCount < requested;
         return spawnCount;
+    }
+
+    public static int GetLootSpawnCount(SpawnGroupDefinition definition, out bool wasClamped)
+    {
+        return GetPointBoundedSpawnCount(definition, out wasClamped);
     }
 }

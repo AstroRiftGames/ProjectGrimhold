@@ -39,6 +39,12 @@ public sealed class PlayerInputReader : MonoBehaviour
     public event Action InventoryToggleRequested;
 
     /// <summary>
+    /// Raised for the local-only action that requests closing the raid inventory.
+    /// It never opens a closed inventory and is not included in network input.
+    /// </summary>
+    public event Action InventoryCloseRequested;
+
+    /// <summary>
     /// Raised for the local-only interaction press edge.
     /// Presentation elements observe this event (e.g., to close the looting screen)
     /// without sending network RPCs or advancing gameplay simulation.
@@ -58,6 +64,7 @@ public sealed class PlayerInputReader : MonoBehaviour
         _inputActions.Gameplay.Interact.canceled += OnInteractCanceled;
         _inputActions.Gameplay.PrimaryAttack.canceled += OnPrimaryAttackCanceled;
         _inputActions.LocalUI.ToggleInventory.performed += OnToggleInventoryPerformed;
+        _inputActions.LocalUI.CloseInventory.performed += OnCloseInventoryPerformed;
         _inputActions.Gameplay.Enable();
         _inputActions.LocalUI.Enable();
     }
@@ -76,6 +83,7 @@ public sealed class PlayerInputReader : MonoBehaviour
         _inputActions.Gameplay.Interact.canceled -= OnInteractCanceled;
         _inputActions.Gameplay.PrimaryAttack.canceled -= OnPrimaryAttackCanceled;
         _inputActions.LocalUI.ToggleInventory.performed -= OnToggleInventoryPerformed;
+        _inputActions.LocalUI.CloseInventory.performed -= OnCloseInventoryPerformed;
         _inputActions.Gameplay.Disable();
         _inputActions.LocalUI.Disable();
         ResetInputState();
@@ -108,6 +116,11 @@ public sealed class PlayerInputReader : MonoBehaviour
     private void OnToggleInventoryPerformed(InputAction.CallbackContext context)
     {
         InventoryToggleRequested?.Invoke();
+    }
+
+    private void OnCloseInventoryPerformed(InputAction.CallbackContext context)
+    {
+        InventoryCloseRequested?.Invoke();
     }
 
     private void OnInteractCanceled(InputAction.CallbackContext context)

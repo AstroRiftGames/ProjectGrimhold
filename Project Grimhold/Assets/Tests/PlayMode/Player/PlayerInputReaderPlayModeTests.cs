@@ -130,6 +130,19 @@ namespace Assets.Tests.PlayMode.Player
         }
 
         [Test]
+        public void InventoryClose_RemainsAvailableDuringSuppression()
+        {
+            int closeCount = 0;
+            _reader.InventoryCloseRequested += () => closeCount++;
+            using IDisposable suppression = _reader.AcquireGameplayInputSuppression();
+
+            SetKey(Key.Escape, true);
+
+            Assert.That(closeCount, Is.EqualTo(1));
+            Assert.That(_reader.ConsumeNetworkInput().Equals(default(PlayerNetworkInput)), Is.True);
+        }
+
+        [Test]
         public void InteractPressedLocally_FiresDuringSuppressionAndDoesNotTransport()
         {
             int localPressCount = 0;

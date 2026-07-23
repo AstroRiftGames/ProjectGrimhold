@@ -119,6 +119,54 @@ namespace Tests.PlayMode.Presentation
             suppression.Dispose();
         }
 
+        [TestCase(1)] // ScreenMode.Personal
+        [TestCase(2)] // ScreenMode.ContainerLoot
+        public void Escape_WhileInventoryIsOpen_ClosesScreenAndReleasesSuppression(int mode)
+        {
+            SetPresenterMode(_presenter, mode);
+            SetViewScreenVisible(_view, true);
+            SetViewContainerVisible(_view, mode == 2);
+            IDisposable suppression = _inputReader.AcquireGameplayInputSuppression();
+            SetPresenterField(_presenter, "_inputSuppression", suppression);
+
+            Action closeHandler = () => InvokeMethod(_presenter, "OnInventoryCloseRequested");
+            _inputReader.InventoryCloseRequested += closeHandler;
+            try
+            {
+                SetKey(_keyboard, Key.Escape, true);
+
+                Assert.That(GetPresenterMode(_presenter), Is.EqualTo(0));
+                Assert.That(_view.IsOpen, Is.False);
+                Assert.That(ReadSuppressionCount(_inputReader), Is.EqualTo(0));
+            }
+            finally
+            {
+                _inputReader.InventoryCloseRequested -= closeHandler;
+            }
+        }
+
+        [Test]
+        public void Escape_WhileInventoryIsClosed_DoesNotOpenIt()
+        {
+            SetPresenterMode(_presenter, 0);
+            SetViewScreenVisible(_view, false);
+
+            Action closeHandler = () => InvokeMethod(_presenter, "OnInventoryCloseRequested");
+            _inputReader.InventoryCloseRequested += closeHandler;
+            try
+            {
+                SetKey(_keyboard, Key.Escape, true);
+
+                Assert.That(GetPresenterMode(_presenter), Is.EqualTo(0));
+                Assert.That(_view.IsOpen, Is.False);
+                Assert.That(ReadSuppressionCount(_inputReader), Is.EqualTo(0));
+            }
+            finally
+            {
+                _inputReader.InventoryCloseRequested -= closeHandler;
+            }
+        }
+
         [Test]
         public void ClosingLootMode_DoesNotModifyContainerContentOrAvailability()
         {

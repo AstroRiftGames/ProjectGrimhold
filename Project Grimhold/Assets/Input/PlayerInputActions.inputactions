@@ -146,6 +146,15 @@
                     "processors": "",
                     "interactions": "Press(behavior=0)",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "CloseInventory",
+                    "type": "Button",
+                    "id": "f7fe3bbd-923a-46eb-a00b-af8f671b225d",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press(behavior=0)",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -157,6 +166,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "ToggleInventory",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "751a7d25-00c2-49fb-a93c-ed03b9adbb11",
+                    "path": "<Keyboard>/escape",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "CloseInventory",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

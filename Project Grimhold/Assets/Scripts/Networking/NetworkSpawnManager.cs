@@ -36,10 +36,14 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
     [SerializeField]
     private NetworkPrefabRef _lootContainerPrefab;
 
+    [SerializeField]
+    private NetworkPrefabRef _breakablePrefab;
+
     private readonly HashSet<PlayerRef> _admittedPlayers = new();
     private readonly Dictionary<PlayerRef, NetworkObject> _spawnedPlayers = new();
     private readonly List<NetworkObject> _spawnedEnemies = new();
     private readonly InitialLootSpawnState _lootSpawnState = new();
+    private readonly InitialBreakableSpawnState _breakableSpawnState = new();
 
     private ulong _lootSessionSeed;
     private bool _hasLootSessionSeed;
@@ -61,6 +65,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
     /// </summary>
     public NetworkMatchController MatchController => _matchController;
     public NetworkPrefabRef LootContainerPrefab => _lootContainerPrefab;
+    public NetworkPrefabRef BreakablePrefab => _breakablePrefab;
 
     private void Awake()
     {
@@ -74,6 +79,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         _spawnedPlayers.Clear();
         _spawnedEnemies.Clear();
         _lootSpawnState.Clear();
+        _breakableSpawnState.Clear();
         _lootSessionSeed = 0;
         _hasLootSessionSeed = false;
         _spawnPointLookup.Clear();
@@ -118,6 +124,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         _spawnedPlayers.Clear();
         _spawnedEnemies.Clear();
         _lootSpawnState.Clear();
+        _breakableSpawnState.Clear();
         _lootSessionSeed = 0;
         _hasLootSessionSeed = false;
         _spawnPointLookup.Clear();
@@ -146,6 +153,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         }
 
         _lootContainerPrefab = configuredManager._lootContainerPrefab;
+        _breakablePrefab = configuredManager._breakablePrefab;
         if (!_lootContainerPrefab.IsValid)
         {
             Debug.LogError(
@@ -251,6 +259,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         _spawnPointLookup.Clear();
         _sceneSpawnPointConfiguration = null;
         _lootSpawnState.Clear();
+        _breakableSpawnState.Clear();
 
         // Increment scene load generation to build a unique load identity
         _currentSceneLoadGeneration++;
@@ -437,6 +446,9 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
                                 break;
                             case InitialSpawnGroupPolicy.SpawnKind.LootContainers:
                                 SpawnConfiguredLootContainers(runner, group);
+                                break;
+                            case InitialSpawnGroupPolicy.SpawnKind.Breakables:
+                                SpawnConfiguredBreakables(runner, group);
                                 break;
                             default:
                                 Debug.LogWarning(
@@ -769,6 +781,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             ulong containerSeed = LootContainerSeedRules.Derive(
                 _lootSessionSeed,
                 _currentSceneLoadGeneration,
+                (int)SpawnGroupType.Loot,
                 spawnIndex);
             if (!LootContainerContentRoller.TryRoll(
                     snapshot,
@@ -987,6 +1000,261 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         return true;
     }
 
+    private void SpawnConfiguredBreakables(NetworkRunner runner, SpawnGroupDefinition definition)
+    {
+        if (!_breakablePrefab.IsValid)
+        {
+            Debug.LogError(
+                "[NetworkSpawnManager] Breakables group skipped because its network prefab is not configured.",
+                this);
+            return;
+        }
+
+        if (!TryPrepareBreakableContentSnapshot(
+                runner,
+                out ValidatedLootContainerContentSnapshot snapshot,
+                out string preparationError))
+        {
+            Debug.LogError(
+                $"[NetworkSpawnManager] Breakables group skipped because its configuration is invalid. {preparationError}",
+                this);
+            return;
+        }
+
+        if (!EnsureLootSessionSeed(runner))
+        {
+            Debug.LogError(
+                "[NetworkSpawnManager] Breakables group skipped because a server-owned session seed could not be created.",
+                this);
+            return;
+        }
+
+        int spawnCount = InitialSpawnGroupPolicy.GetPointBoundedSpawnCount(
+            definition,
+            out bool wasClamped);
+        if (wasClamped)
+        {
+            Debug.LogWarning(
+                $"[NetworkSpawnManager] Breakables group requested {definition.Amount} objects but has only {definition.SpawnPoints.Length} points. Spawning was limited to {spawnCount}.",
+                this);
+        }
+
+        for (int spawnIndex = 0; spawnIndex < spawnCount; spawnIndex++)
+        {
+            if (_breakableSpawnState.ContainsPoint(spawnIndex))
+            {
+                continue;
+            }
+
+            ulong dropSeed = LootContainerSeedRules.Derive(
+                _lootSessionSeed,
+                _currentSceneLoadGeneration,
+                (int)SpawnGroupType.Breakables,
+                spawnIndex);
+            if (!LootContainerContentRoller.TryRoll(
+                    snapshot,
+                    dropSeed,
+                    out IReadOnlyList<LootEntry> rolledDrops,
+                    out string rollError))
+            {
+                Debug.LogError(
+                    $"[NetworkSpawnManager] Breakable loot roll failed for point {spawnIndex}, generation {_currentSceneLoadGeneration}, seed {dropSeed}. {rollError}",
+                    this);
+                continue;
+            }
+
+            NetworkObject breakableObject = SpawnBreakable(
+                runner,
+                spawnIndex,
+                dropSeed,
+                rolledDrops,
+                out bool fatalIntegrationFailure);
+            if (breakableObject == null)
+            {
+                if (fatalIntegrationFailure)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            _breakableSpawnState.TryRecordSuccessfulSpawn(spawnIndex, breakableObject);
+        }
+    }
+
+    private NetworkObject SpawnBreakable(
+        NetworkRunner runner,
+        int spawnIndex,
+        ulong dropSeed,
+        IReadOnlyList<LootEntry> rolledDrops,
+        out bool fatalIntegrationFailure)
+    {
+        fatalIntegrationFailure = false;
+        if (runner == null || runner != _runner || !runner.IsServer ||
+            !_breakablePrefab.IsValid || rolledDrops == null)
+        {
+            return null;
+        }
+
+        GetSpawnTransform(
+            SpawnGroupType.Breakables,
+            spawnIndex,
+            out Vector3 position,
+            out Quaternion rotation);
+        bool callbackApplied = false;
+        NetworkObject callbackObject = null;
+        BreakableObject callbackBreakable = null;
+        NetworkObject breakableObject = runner.Spawn(
+            _breakablePrefab,
+            position,
+            rotation,
+            inputAuthority: null,
+            onBeforeSpawned: (callbackRunner, instance) =>
+            {
+                callbackObject = instance;
+                callbackBreakable = instance != null
+                    ? instance.GetComponent<BreakableObject>()
+                    : null;
+                callbackApplied = callbackBreakable != null &&
+                    callbackBreakable.TrySetInitialDropsOverride(
+                        callbackRunner,
+                        instance,
+                        rolledDrops);
+            });
+
+        if (breakableObject == null)
+        {
+            Debug.LogError(
+                $"[NetworkSpawnManager] Breakable spawn failed at point {spawnIndex}, position {position}.",
+                this);
+            return null;
+        }
+
+        bool initializedSuccessfully = breakableObject.Id.IsValid &&
+            ReferenceEquals(callbackObject, breakableObject) &&
+            callbackBreakable != null &&
+            callbackBreakable.Object == breakableObject &&
+            callbackApplied &&
+            callbackBreakable.HasInitialDrops;
+        if (!initializedSuccessfully)
+        {
+            Debug.LogError(
+                $"[NetworkSpawnManager] Breakable initialization failed at point {spawnIndex}, position {position}, seed {dropSeed}. The instance will be despawned.",
+                breakableObject);
+            CompensateFailedSpawn(
+                runner,
+                breakableObject,
+                "breakable",
+                ref fatalIntegrationFailure);
+            return null;
+        }
+
+        Debug.Log(
+            $"[NetworkSpawnManager] Spawned breakable at point {spawnIndex}, position {position}.",
+            breakableObject);
+        return breakableObject;
+    }
+
+    private bool TryPrepareBreakableContentSnapshot(
+        NetworkRunner runner,
+        out ValidatedLootContainerContentSnapshot snapshot,
+        out string error)
+    {
+        snapshot = null;
+        error = null;
+
+        if (runner == null || runner != _runner || !runner.IsServer || runner.Config == null)
+        {
+            error = "Runner is missing, mismatched, or lacks server authority.";
+            return false;
+        }
+
+        NetworkPrefabId prefabId = runner.Config.PrefabTable.GetId((NetworkObjectGuid)_breakablePrefab);
+        if (!prefabId.IsValid)
+        {
+            error = "The configured breakable prefab is not registered in Fusion's prefab table.";
+            return false;
+        }
+
+        NetworkObject prefabObject = runner.Config.PrefabTable.Load(prefabId, true);
+        BreakableObject breakable = prefabObject != null
+            ? prefabObject.GetComponent<BreakableObject>()
+            : null;
+        if (breakable == null)
+        {
+            error = "The configured prefab has no BreakableObject on its root.";
+            return false;
+        }
+
+        if (!breakable.PickupPrefab.IsValid)
+        {
+            error = "The breakable has no valid pickup prefab.";
+            return false;
+        }
+
+        NetworkPrefabId pickupPrefabId =
+            runner.Config.PrefabTable.GetId((NetworkObjectGuid)breakable.PickupPrefab);
+        NetworkObject pickupPrefab = pickupPrefabId.IsValid
+            ? runner.Config.PrefabTable.Load(pickupPrefabId, true)
+            : null;
+        NetworkLootPickup pickup = pickupPrefab != null
+            ? pickupPrefab.GetComponent<NetworkLootPickup>()
+            : null;
+        if (pickup == null || pickup.LootCatalog != breakable.LootCatalog)
+        {
+            error = "The pickup prefab is missing, unregistered, or uses a different loot catalog.";
+            return false;
+        }
+
+        if (breakable.DropCapacity <= 0 ||
+            breakable.LootTable == null ||
+            breakable.LootTable.MaximumDistinctStacks > breakable.DropCapacity)
+        {
+            error = "The breakable table and drop offsets have incompatible capacities.";
+            return false;
+        }
+
+        return LootContainerContentTableValidation.TryCreateSnapshot(
+            breakable.LootTable,
+            breakable.LootCatalog,
+            breakable.DropCapacity,
+            NetworkLootContainer.MaxLootTypes,
+            out snapshot,
+            out error);
+    }
+
+    private static void CompensateFailedSpawn(
+        NetworkRunner runner,
+        NetworkObject spawnedObject,
+        string objectKind,
+        ref bool fatalIntegrationFailure)
+    {
+        if (runner == null || spawnedObject == null || !spawnedObject.Id.IsValid)
+        {
+            return;
+        }
+
+        NetworkId spawnedId = spawnedObject.Id;
+        try
+        {
+            runner.Despawn(spawnedObject);
+            if (runner.TryFindObject(spawnedId, out NetworkObject remainingObject) &&
+                ReferenceEquals(remainingObject, spawnedObject))
+            {
+                fatalIntegrationFailure = true;
+                Debug.LogError(
+                    $"[NetworkSpawnManager] Compensating despawn did not remove {objectKind} object {spawnedId}.",
+                    spawnedObject);
+            }
+        }
+        catch (Exception exception)
+        {
+            fatalIntegrationFailure = true;
+            Debug.LogException(exception, spawnedObject);
+        }
+    }
+
     public override void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
         if (!runner.IsServer || runner != _runner)
@@ -1013,6 +1281,7 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             _spawnedPlayers.Clear();
             _spawnedEnemies.Clear();
             _lootSpawnState.Clear();
+            _breakableSpawnState.Clear();
             _lootSessionSeed = 0;
             _hasLootSessionSeed = false;
             _spawnPointLookup.Clear();
@@ -1089,9 +1358,12 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
             return null;
         }
 
-        if (group == SpawnGroupType.Loot || prefab == _lootContainerPrefab)
+        if (group == SpawnGroupType.Loot ||
+            group == SpawnGroupType.Breakables ||
+            prefab == _lootContainerPrefab ||
+            prefab == _breakablePrefab)
         {
-            Debug.LogError("[NetworkSpawnManager] The configured random loot container must use the dedicated initial Loot spawn pipeline.", this);
+            Debug.LogError("[NetworkSpawnManager] Randomized scene entities must use their dedicated initial spawn pipeline.", this);
             return null;
         }
 
@@ -1118,9 +1390,9 @@ public sealed class NetworkSpawnManager : NetworkRunnerCallbacksAdapter
         Vector3 position,
         Quaternion rotation)
     {
-        if (prefab == _lootContainerPrefab)
+        if (prefab == _lootContainerPrefab || prefab == _breakablePrefab)
         {
-            Debug.LogError("[NetworkSpawnManager] The configured random loot container cannot bypass its dedicated initial-content pipeline.", this);
+            Debug.LogError("[NetworkSpawnManager] Randomized scene entities cannot bypass their dedicated initial-content pipeline.", this);
             return null;
         }
 

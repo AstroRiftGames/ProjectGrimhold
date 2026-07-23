@@ -7,6 +7,7 @@ namespace Spawning
         Loot,
         NPCs,
         Bosses,
-        Misc
+        Misc,
+        Breakables
     }
 }

@@ -36,11 +36,11 @@ Opening reconstructs the target `NetworkId`, resolves the exact instance through
 
 Player and container `LootChangeSequence` values are the definitive refresh signals, including remote transfers. `RequestInFlightChanged` only recalculates interactivity. `TransferConfirmed` always refreshes the player; it reconciles the current container and selection only when `SourceId` matches the open container. Therefore a late confirmation from A cannot alter B.
 
-Close is idempotent, releases one suppression token, clears mode, target, colliders and selection, and never cancels gameplay. Distance, target replacement/despawn, unavailable/uninitialized state, local close (via local Tab toggle or a new local interaction press edge `InteractPressedLocally`), session end, player despawn and HUD disable all close the screen. Closing and reopening while a request remains in flight observes the controller directly and keeps slots blocked.
+Close is idempotent, releases one suppression token, clears mode, target, colliders and selection, and never cancels gameplay. Distance, target replacement/despawn, unavailable/uninitialized state, local close (via local Tab toggle, Escape, or a new local interaction press edge `InteractPressedLocally`), session end, player despawn and HUD disable all close the screen. Closing and reopening while a request remains in flight observes the controller directly and keeps slots blocked.
 
 ## Local input boundary
 
-`PlayerInputReader` owns one `PlayerInputActions` instance with the normal `Gameplay` map and a local-only `LocalUI.ToggleInventory` action bound provisionally to Tab. The toggle and local `InteractPressedLocally` edge notification are not part of `PlayerNetworkInput` or `PlayerInputButton`.
+`PlayerInputReader` owns one `PlayerInputActions` instance with the normal `Gameplay` map and local-only `LocalUI.ToggleInventory` and `LocalUI.CloseInventory` actions bound to Tab and Escape respectively. Tab toggles the personal or container screen; Escape only requests a close, so it never opens a closed inventory. These intentions and the local `InteractPressedLocally` edge notification are not part of `PlayerNetworkInput` or `PlayerInputButton`.
 
 Opening the screen acquires a small owner-specific suppression token. While any token exists, `ConsumeNetworkInput` returns `default(PlayerNetworkInput)` and discrete attack/interaction buffers are discarded. Gameplay and LocalUI action maps remain under their normal component lifecycle and are not toggled by suppression.
 

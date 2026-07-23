@@ -69,6 +69,17 @@ Fusion simulation processes authoritative requests serially. The first complete 
 
 `CommitReceive` is generic and emits no pickup toast. `ILootPickupFeedbackSink` is an optional integration boundary implemented by `PlayerLootReceiver`. `NetworkLootPickup` invokes it only after a successful pickup commit. Its presentation RPC uses primitive values and reconstructs `LootGrantPresentationEvent` locally. Container transfers never consult this sink.
 
+`NetworkLootPickup` also supports authoritative pre-spawn initialization for
+world drops. It replicates catalog index and quantity, resolves the shared
+`LootDefinition` and world sprite locally, and otherwise uses the same registry,
+interaction, transfer, feedback and despawn flow. Breakables release these
+pickups directly and never expose a container interaction; see
+`Docs/Architecture/BreakableLootArchitecture.md`.
+World rendering remains prefab-owned rather than definition-owned: the generic
+pickup exposes a sorting layer and order, then applies both whenever it resolves
+a `LootDefinition.WorldSprite`. Dynamic loot therefore shares one configurable
+map-rendering policy without requiring a prefab per loot definition.
+
 ## Prefabs and development validation
 
 `NetworkPlayer.prefab` contains `PlayerLootTransferNetworkController` and no debug component. `LootContainer.prefab` contains one `NetworkObject`, `NetworkLootContainer`, `NetworkLootContainerInteractable`, enabled `LootContainerRandomContentConfig`, local prompt metadata, a layer-8 collider and its provisional visual. Its serialized manual stacks remain an empty development fallback; the production spawn path requires a valid random table.

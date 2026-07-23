@@ -16,8 +16,32 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
     [SerializeField]
     private int _amount = 1;
 
+    [SerializeField]
+    private LootDefinitionCatalog _lootCatalog;
+
+    [SerializeField]
+    private SpriteRenderer _worldRenderer;
+
+    [Header("World Presentation")]
+    [SerializeField]
+    private string _sortingLayerName = "Default";
+
+    [SerializeField]
+    private int _sortingOrder = 2;
+
     [Networked]
     private NetworkBool IsConsumed { get; set; }
+
+    /// <summary>Whether replicated loot identity and quantity are ready for interaction.</summary>
+    [Networked]
+    public NetworkBool IsInitialized { get; private set; }
+
+    /// <summary>Deterministic shared-catalog index replicated to every peer.</summary>
+    [Networked]
+    public int LootCatalogIndex { get; private set; }
+
+    [Networked]
+    private int SynchronizedAmount { get; set; }
 
     public bool IsAvailable => !IsConsumed;
 
@@ -27,23 +51,55 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
     private EntityRegistry _registry;
     private bool _isRegistered;
     private EntityId _registeredId;
+    private LootEntry _spawnContentOverride;
+    private bool _hasSpawnContentOverride;
+    private LootDefinition _resolvedLootDefinition;
 
-    public LootDefinition LootDefinition => _lootDefinition;
-    public int Amount => _amount;
+    /// <summary>Static loot definition resolved locally from replicated catalog identity.</summary>
+    public LootDefinition LootDefinition => _resolvedLootDefinition;
+
+    /// <summary>Replicated quantity delivered by a successful pickup interaction.</summary>
+    public int Amount => IsInitialized ? SynchronizedAmount : 0;
+
+    /// <summary>Shared catalog used to translate stable network indices.</summary>
+    public LootDefinitionCatalog LootCatalog => _lootCatalog;
+
+    /// <summary>Sorting layer applied to the renderer of every resolved world sprite.</summary>
+    public string SortingLayerName => _sortingLayerName;
+
+    /// <summary>Sorting order applied to the renderer of every resolved world sprite.</summary>
+    public int SortingOrder => _sortingOrder;
 
     private void Awake()
     {
         _cachedColliders = GetComponentsInChildren<Collider2D>(true);
+        if (_worldRenderer == null)
+        {
+            _worldRenderer = GetComponentInChildren<SpriteRenderer>(true);
+        }
+
+        ApplyWorldPresentation();
     }
 
     public override void Spawned()
     {
+        if (HasStateAuthority)
+        {
+            InitializeAuthoritativeState();
+        }
+
+        RefreshResolvedLoot();
         _registry = Runner.GetComponent<EntityRegistry>();
         if (_registry != null)
         {
             _registeredId = Id;
             _isRegistered = _registry.TryRegisterEntity(_registeredId, this, _cachedColliders);
         }
+    }
+
+    public override void Render()
+    {
+        RefreshResolvedLoot();
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
@@ -53,13 +109,41 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
             _registry.TryUnregisterEntity(_registeredId, this);
             _isRegistered = false;
         }
+
+        _resolvedLootDefinition = null;
+        _spawnContentOverride = default;
+        _hasSpawnContentOverride = false;
+    }
+
+    /// <summary>
+    /// Supplies the loot stack during Fusion's authoritative pre-spawn callback.
+    /// The catalog index and quantity are written to replicated state from
+    /// <see cref="Spawned"/> before the object is published to proxies.
+    /// </summary>
+    internal bool TrySetSpawnContentOverride(
+        NetworkRunner runner,
+        NetworkObject expectedObject,
+        in LootEntry entry)
+    {
+        if (_hasSpawnContentOverride || runner == null || !runner.IsServer ||
+            expectedObject == null || expectedObject.gameObject != gameObject ||
+            expectedObject.GetComponent<NetworkLootPickup>() != this ||
+            !entry.IsValid || _lootCatalog == null ||
+            !_lootCatalog.TryGetIndex(entry.LootId, out _))
+        {
+            return false;
+        }
+
+        _spawnContentOverride = entry;
+        _hasSpawnContentOverride = true;
+        return true;
     }
 
     public bool CanInteract(in InteractionRequest request)
     {
         if (request.TargetId != Id) return false;
-        if (_lootDefinition == null) return false;
-        if (_amount <= 0) return false;
+        if (!IsInitialized || _resolvedLootDefinition == null) return false;
+        if (SynchronizedAmount <= 0) return false;
         if (!IsAvailable) return false;
         if (request.InteractorId.Value == 0) return false;
 
@@ -91,8 +175,8 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
         var transferRequest = new LootTransferRequest(
             Id,
             request.InteractorId,
-            _lootDefinition.LootId,
-            _amount,
+            _resolvedLootDefinition.LootId,
+            SynchronizedAmount,
             request.SimulationTick);
 
         // The pickup's reservation prevents two authoritative interactions from
@@ -118,6 +202,79 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
         Runner.Despawn(Object);
         return ToInteractionResult(transferResult, true);
     }
+
+    private void InitializeAuthoritativeState()
+    {
+        LootEntry entry = _hasSpawnContentOverride
+            ? _spawnContentOverride
+            : _lootDefinition != null
+                ? new LootEntry(_lootDefinition.LootId, _amount)
+                : default;
+
+        if (!entry.IsValid || _lootCatalog == null ||
+            !_lootCatalog.TryGetIndex(entry.LootId, out int catalogIndex))
+        {
+            Debug.LogError(
+                $"{nameof(NetworkLootPickup)} could not initialize '{name}' because its loot entry or catalog is invalid.",
+                this);
+            IsInitialized = false;
+            return;
+        }
+
+        LootCatalogIndex = catalogIndex;
+        SynchronizedAmount = entry.Amount;
+        IsConsumed = false;
+        IsInitialized = true;
+    }
+
+    private void RefreshResolvedLoot()
+    {
+        if (!IsInitialized || _lootCatalog == null ||
+            !_lootCatalog.TryGetByIndex(LootCatalogIndex, out LootDefinition definition))
+        {
+            _resolvedLootDefinition = null;
+            return;
+        }
+
+        if (_resolvedLootDefinition == definition)
+        {
+            return;
+        }
+
+        _resolvedLootDefinition = definition;
+        if (_worldRenderer != null)
+        {
+            _worldRenderer.sprite = definition.WorldSprite;
+            ApplyWorldPresentation();
+        }
+    }
+
+    private void ApplyWorldPresentation()
+    {
+        if (_worldRenderer == null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_sortingLayerName))
+        {
+            _worldRenderer.sortingLayerName = _sortingLayerName;
+        }
+
+        _worldRenderer.sortingOrder = _sortingOrder;
+    }
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        if (_worldRenderer == null)
+        {
+            _worldRenderer = GetComponentInChildren<SpriteRenderer>(true);
+        }
+
+        ApplyWorldPresentation();
+    }
+#endif
 
     private static InteractionResult ToInteractionResult(
         in LootTransferResult transferResult,

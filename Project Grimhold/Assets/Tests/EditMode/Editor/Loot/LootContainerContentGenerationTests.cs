@@ -155,6 +155,30 @@ namespace Tests.EditMode.Loot
             Assert.That(LootContainerSeedRules.Derive(123, 5, 0), Is.Not.EqualTo(first));
         }
 
+        [Test]
+        public void SeedDerivation_SeparatesLootAndBreakableDomains()
+        {
+            ulong lootSeed = LootContainerSeedRules.Derive(
+                123,
+                4,
+                (int)Spawning.SpawnGroupType.Loot,
+                0);
+            ulong breakableSeed = LootContainerSeedRules.Derive(
+                123,
+                4,
+                (int)Spawning.SpawnGroupType.Breakables,
+                0);
+
+            Assert.That(breakableSeed, Is.Not.EqualTo(lootSeed));
+            Assert.That(
+                LootContainerSeedRules.Derive(
+                    123,
+                    4,
+                    (int)Spawning.SpawnGroupType.Breakables,
+                    0),
+                Is.EqualTo(breakableSeed));
+        }
+
         private bool TrySnapshot(
             LootContainerContentTable table,
             out ValidatedLootContainerContentSnapshot snapshot,

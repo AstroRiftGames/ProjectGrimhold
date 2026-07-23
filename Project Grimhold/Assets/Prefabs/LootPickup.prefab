@@ -69,6 +69,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkLootPickup
   _lootDefinition: {fileID: 11400000, guid: 588f98d3ce1283d47adcf8bc420f12d5, type: 2}
   _amount: 1
+  _lootCatalog: {fileID: 11400000, guid: f11f98d3ce1283d47adcf8bc420f88a2, type: 2}
+  _worldRenderer: {fileID: 3134618034655897849}
+  _sortingLayerName: Default
+  _sortingOrder: 2
 --- !u!212 &3134618034655897849
 SpriteRenderer:
   serializedVersion: 3
@@ -116,7 +120,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 2
   m_MaskInteraction: 0
   m_Sprite: {fileID: 4558328157082805911, guid: af101e7447dee2b478180f3daf3fe774, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}

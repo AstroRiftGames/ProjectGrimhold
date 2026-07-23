@@ -16,6 +16,8 @@ namespace Tests.EditMode.Loot
         private const string GameplayScenePath = "Assets/Scenes/Gameplay.unity";
         private const string LootContainerPath = "Assets/Prefabs/LootContainer.prefab";
         private const string EnemyPrefabPath = "Assets/Prefabs/NetworkEnemy.prefab";
+        private const string BreakablePrefabPath = "Assets/Prefabs/BreakableObject.prefab";
+        private const string PickupPrefabPath = "Assets/Prefabs/LootPickup.prefab";
 
         [Test]
         public void InitialPolicy_UsesExplicitIntegrationsAndRejectsEnemyFallbacks()
@@ -26,12 +28,84 @@ namespace Tests.EditMode.Loot
                 Is.EqualTo(InitialSpawnGroupPolicy.SpawnKind.Enemies));
             Assert.That(InitialSpawnGroupPolicy.Resolve(SpawnGroupType.Loot),
                 Is.EqualTo(InitialSpawnGroupPolicy.SpawnKind.LootContainers));
+            Assert.That(InitialSpawnGroupPolicy.Resolve(SpawnGroupType.Breakables),
+                Is.EqualTo(InitialSpawnGroupPolicy.SpawnKind.Breakables));
             Assert.That(InitialSpawnGroupPolicy.Resolve(SpawnGroupType.NPCs),
                 Is.EqualTo(InitialSpawnGroupPolicy.SpawnKind.Unsupported));
             Assert.That(InitialSpawnGroupPolicy.Resolve(SpawnGroupType.Bosses),
                 Is.EqualTo(InitialSpawnGroupPolicy.SpawnKind.Unsupported));
             Assert.That(InitialSpawnGroupPolicy.Resolve(SpawnGroupType.Misc),
                 Is.EqualTo(InitialSpawnGroupPolicy.SpawnKind.Unsupported));
+        }
+
+        [Test]
+        public void BreakablePrefab_IsDamageableWorldContentAndNotInspectableLoot()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(BreakablePrefabPath);
+            GameObject pickupPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PickupPrefabPath);
+
+            Assert.That(prefab, Is.Not.Null);
+            Assert.That(pickupPrefab, Is.Not.Null);
+            BreakableObject breakable = prefab.GetComponent<BreakableObject>();
+            Assert.That(breakable, Is.Not.Null);
+            Assert.That(prefab.GetComponent<NetworkObject>(), Is.Not.Null);
+            Assert.That(prefab.GetComponent<IInteractable>(), Is.Null);
+            Assert.That(prefab.GetComponent<ILootExtractor>(), Is.Null);
+            Assert.That(prefab.GetComponent<ILootQuantityReader>(), Is.Null);
+            Assert.That(prefab.GetComponent<NetworkLootContainer>(), Is.Null);
+            Assert.That(breakable.LootTable, Is.Not.Null);
+            Assert.That(breakable.LootCatalog, Is.Not.Null);
+            Assert.That(breakable.DropCapacity,
+                Is.GreaterThanOrEqualTo(breakable.LootTable.MaximumDistinctStacks));
+
+            Collider2D[] colliders = prefab.GetComponentsInChildren<Collider2D>(true);
+            Assert.That(colliders, Has.Length.EqualTo(2));
+            Assert.That(colliders, Has.Some.Matches<Collider2D>(
+                collider => collider.gameObject.layer == LayerMask.NameToLayer("Character")));
+            Assert.That(colliders, Has.Some.Matches<Collider2D>(
+                collider => collider.gameObject.layer == LayerMask.NameToLayer("WorldCollision") && !collider.isTrigger));
+
+            NetworkLootPickup pickup = pickupPrefab.GetComponent<NetworkLootPickup>();
+            Assert.That(pickup, Is.Not.Null);
+            Assert.That(pickup.LootCatalog, Is.SameAs(breakable.LootCatalog));
+            Assert.That(pickup.SortingLayerName, Is.EqualTo("Default"));
+            Assert.That(pickup.SortingOrder, Is.EqualTo(2));
+            Assert.That(pickupPrefab.GetComponentInChildren<SpriteRenderer>(true).sortingOrder,
+                Is.EqualTo(pickup.SortingOrder));
+            Assert.That(breakable.PickupPrefab.ToString(),
+                Is.EqualTo(NetworkObjectEditor.GetPrefabGuid(pickupPrefab.GetComponent<NetworkObject>()).ToString()));
+        }
+
+        [Test]
+        public void BreakableSpawnState_IsIdempotentAndPointBounded()
+        {
+            var points = new Transform[2];
+            var definition = new SpawnGroupDefinition
+            {
+                Group = SpawnGroupType.Breakables,
+                SpawnPoints = points,
+                Amount = 3
+            };
+            Assert.That(
+                InitialSpawnGroupPolicy.GetPointBoundedSpawnCount(definition, out bool wasClamped),
+                Is.EqualTo(2));
+            Assert.That(wasClamped, Is.True);
+
+            var holder = new GameObject("Spawned breakable");
+            NetworkObject spawned = holder.AddComponent<NetworkObject>();
+            var state = new InitialBreakableSpawnState();
+            try
+            {
+                Assert.That(state.TryRecordSuccessfulSpawn(0, spawned), Is.True);
+                Assert.That(state.TryRecordSuccessfulSpawn(0, spawned), Is.False);
+                Assert.That(state.Count, Is.EqualTo(1));
+                state.Clear();
+                Assert.That(state.ContainsPoint(0), Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(holder);
+            }
         }
 
         [Test]
@@ -123,6 +197,13 @@ namespace Tests.EditMode.Loot
                     placedContainers += root.GetComponentsInChildren<NetworkLootContainer>(true).Length;
                 }
                 Assert.That(placedContainers, Is.Zero);
+
+                SpawnGroupDefinition breakableGroup = FindGroup(configuration, SpawnGroupType.Breakables);
+                Assert.That(breakableGroup, Is.Not.Null);
+                Assert.That(breakableGroup.Amount, Is.GreaterThan(0));
+                Assert.That(breakableGroup.Amount, Is.LessThanOrEqualTo(breakableGroup.SpawnPoints.Length));
+                Assert.That(new HashSet<Transform>(breakableGroup.SpawnPoints).Count,
+                    Is.EqualTo(breakableGroup.SpawnPoints.Length));
             }
             finally
             {

@@ -76,10 +76,16 @@ Initial scene groups use an explicit dispatch policy:
 Players -> SpawnPlayer
 Enemies -> SpawnEnemy
 Loot -> SpawnLootContainer
+Breakables -> SpawnBreakable
 NPCs / Bosses / Misc -> warning and skip
 ```
 
 An unsupported group never falls back to an enemy prefab. A missing loot-container reference reports a contextual error and skips only `Loot`; player and enemy processing continues.
+
+Breakables use the same point-bounded, generation-idempotent initial spawning
+policy. State Authority validates and rolls their weighted drop content before
+spawning, using a group-discriminated seed so container and breakable points do
+not share random streams. See `Docs/Architecture/BreakableLootArchitecture.md`.
 
 Gameplay configures `SpawnGroupType.Loot` with ordered scene transforms. The Host/Server spawns `LootContainer.prefab` without Input Authority, using loop index `0..N-1` as stable point identity. One cryptographic session seed is created locally on the authoritative runner; a pure 64-bit mixer combines it with scene-load generation and point index. The manager validates the prefab table, random-content component, loot table, catalog, weights, quantities and capacities before spawning. It rolls an immutable snapshot and applies the result with Fusion 2.1.1 `OnBeforeSpawned`; clients never roll or receive a seed. When requested amount exceeds point count, it is clamped to the available points with a warning, so an initial generation never overlaps two containers on one point.
 

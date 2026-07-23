@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace Tests.EditMode.Loot
@@ -240,6 +241,24 @@ namespace Tests.EditMode.Loot
             var res = InteractionResult.Rejected(InteractionFailureReason.ReceiverNotFound);
             Assert.IsFalse(res.Success);
             Assert.AreEqual(InteractionFailureReason.ReceiverNotFound, res.FailureReason);
+        }
+
+        [Test]
+        public void GenericPickupPrefab_AppliesConfiguredWorldSorting()
+        {
+            const string prefabPath = "Assets/Prefabs/LootPickup.prefab";
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+
+            Assert.That(prefab, Is.Not.Null);
+            NetworkLootPickup pickup = prefab.GetComponent<NetworkLootPickup>();
+            SpriteRenderer renderer = prefab.GetComponentInChildren<SpriteRenderer>(true);
+
+            Assert.That(pickup, Is.Not.Null);
+            Assert.That(renderer, Is.Not.Null);
+            Assert.That(pickup.SortingLayerName, Is.EqualTo("Default"));
+            Assert.That(pickup.SortingOrder, Is.EqualTo(2));
+            Assert.That(renderer.sortingLayerName, Is.EqualTo(pickup.SortingLayerName));
+            Assert.That(renderer.sortingOrder, Is.EqualTo(pickup.SortingOrder));
         }
 
     }
