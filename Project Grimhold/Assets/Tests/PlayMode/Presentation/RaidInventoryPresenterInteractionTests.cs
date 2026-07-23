@@ -14,15 +14,17 @@ namespace Tests.PlayMode.Presentation
     {
         private const string PlayerPrefabPath = "Assets/Prefabs/NetworkPlayer.prefab";
         private const string ChestPrefabPath = "Assets/Prefabs/LootContainer.prefab";
-        private const string CorpsePrefabPath = "Assets/Prefabs/LootCorpse.prefab";
+        private const string EnemyPrefabPath = "Assets/Prefabs/NetworkEnemy.prefab";
 
         private GameObject _playerInstance;
+        private GameObject _inputReaderHolder;
         private GameObject _chestInstance;
-        private GameObject _corpseInstance;
+        private GameObject _enemyInstance;
         private PlayerInputReader _inputReader;
         private RaidInventoryPresenter _presenter;
         private RaidInventoryView _view;
         private Keyboard _keyboard;
+        private Action _localInteractHandler;
         private object _inputTestFixture;
         private Type _inputTestFixtureType;
 
@@ -43,13 +45,16 @@ namespace Tests.PlayMode.Presentation
             _playerInstance = UnityEngine.Object.Instantiate(playerPrefab);
             _playerInstance.SetActive(false);
 
-            _inputReader = _playerInstance.GetComponentInChildren<PlayerInputReader>(true);
+            _inputReaderHolder = new GameObject("PlayerInputReaderHolder");
+            _inputReader = _inputReaderHolder.AddComponent<PlayerInputReader>();
             _presenter = _playerInstance.GetComponentInChildren<RaidInventoryPresenter>(true);
             _view = _playerInstance.GetComponentInChildren<RaidInventoryView>(true);
 
             Assert.That(_inputReader, Is.Not.Null);
             Assert.That(_presenter, Is.Not.Null);
             Assert.That(_view, Is.Not.Null);
+
+            SetPresenterField(_presenter, "_inputReader", _inputReader);
 
             PlayerInputActions actions = ReadInputActions(_inputReader);
             actions.asset.devices = new InputDevice[] { _keyboard };
@@ -58,16 +63,18 @@ namespace Tests.PlayMode.Presentation
             _chestInstance = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(ChestPrefabPath));
             _chestInstance.SetActive(false);
 
-            _corpseInstance = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(CorpsePrefabPath));
-            _corpseInstance.SetActive(false);
+            _enemyInstance = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(EnemyPrefabPath));
+            _enemyInstance.SetActive(false);
         }
 
         [TearDown]
         public void TearDown()
         {
+            UnsubscribeLocalInteract();
             if (_playerInstance != null) UnityEngine.Object.DestroyImmediate(_playerInstance);
+            if (_inputReaderHolder != null) UnityEngine.Object.DestroyImmediate(_inputReaderHolder);
             if (_chestInstance != null) UnityEngine.Object.DestroyImmediate(_chestInstance);
-            if (_corpseInstance != null) UnityEngine.Object.DestroyImmediate(_corpseInstance);
+            if (_enemyInstance != null) UnityEngine.Object.DestroyImmediate(_enemyInstance);
 
             InputSystem.RemoveDevice(_keyboard);
             _inputTestFixtureType.GetMethod("TearDown").Invoke(_inputTestFixture, null);
@@ -83,7 +90,7 @@ namespace Tests.PlayMode.Presentation
             SetPresenterField(_presenter, "_inputSuppression", suppression);
             SetPresenterField(_presenter, "_inputReader", _inputReader);
 
-            InvokeMethod(_presenter, "Subscribe");
+            SubscribeLocalInteract();
 
             SetKey(_keyboard, Key.E, true);
 
@@ -101,7 +108,7 @@ namespace Tests.PlayMode.Presentation
             SetPresenterField(_presenter, "_inputSuppression", suppression);
             SetPresenterField(_presenter, "_inputReader", _inputReader);
 
-            InvokeMethod(_presenter, "Subscribe");
+            SubscribeLocalInteract();
 
             SetKey(_keyboard, Key.E, true);
 
@@ -127,7 +134,7 @@ namespace Tests.PlayMode.Presentation
             SetPresenterField(_presenter, "_inputSuppression", suppression);
             SetPresenterField(_presenter, "_inputReader", _inputReader);
 
-            InvokeMethod(_presenter, "Subscribe");
+            SubscribeLocalInteract();
 
             SetKey(_keyboard, Key.E, true);
 
@@ -137,37 +144,36 @@ namespace Tests.PlayMode.Presentation
         }
 
         [Test]
-        public void ChestAndCorpsePrefabs_ContainMatchingContainerAndAdapterComposition()
+        public void ChestAndPersistentEnemy_ContainMatchingContainerAndAdapterComposition()
         {
             NetworkLootContainer chestContainer = _chestInstance.GetComponent<NetworkLootContainer>();
             NetworkLootContainerInteractable chestInteractable = _chestInstance.GetComponent<NetworkLootContainerInteractable>();
-            NetworkLootContainer corpseContainer = _corpseInstance.GetComponent<NetworkLootContainer>();
-            NetworkLootContainerInteractable corpseInteractable = _corpseInstance.GetComponent<NetworkLootContainerInteractable>();
+            NetworkLootContainer enemyContainer = _enemyInstance.GetComponent<NetworkLootContainer>();
+            NetworkLootContainerInteractable enemyInteractable = _enemyInstance.GetComponent<NetworkLootContainerInteractable>();
 
             Assert.That(chestContainer, Is.Not.Null);
             Assert.That(chestInteractable, Is.Not.Null);
-            Assert.That(corpseContainer, Is.Not.Null);
-            Assert.That(corpseInteractable, Is.Not.Null);
-            Assert.That(chestInteractable.GetType(), Is.EqualTo(corpseInteractable.GetType()));
-            Assert.That(chestContainer.GetType(), Is.EqualTo(corpseContainer.GetType()));
+            Assert.That(enemyContainer, Is.Not.Null);
+            Assert.That(enemyInteractable, Is.Not.Null);
+            Assert.That(chestInteractable.GetType(), Is.EqualTo(enemyInteractable.GetType()));
+            Assert.That(chestContainer.GetType(), Is.EqualTo(enemyContainer.GetType()));
+            Assert.That(enemyContainer.StartsAvailable, Is.False);
         }
 
         [Test]
-        public void DisableEnableAndUnbind_DoNotDuplicateSubscriptions()
+        public void Close_IsIdempotentAndReleasesSuppressionOnce()
         {
-            SetPresenterField(_presenter, "_inputReader", _inputReader);
             SetPresenterMode(_presenter, 2);
+            SetViewScreenVisible(_view, true);
+            IDisposable suppression = _inputReader.AcquireGameplayInputSuppression();
+            SetPresenterField(_presenter, "_inputSuppression", suppression);
 
-            InvokeMethod(_presenter, "Subscribe");
-            InvokeMethod(_presenter, "Subscribe"); // Idempotent check
+            _presenter.Close();
+            _presenter.Close();
 
-            _presenter.Close(); // Call close to verify state reset
             Assert.That(GetPresenterMode(_presenter), Is.EqualTo(0));
-
-            InvokeMethod(_presenter, "Unsubscribe");
-            InvokeMethod(_presenter, "Unsubscribe"); // Idempotent check
-
-            Assert.That(GetPresenterField<bool>(_presenter, "_isSubscribed"), Is.False);
+            Assert.That(_view.IsOpen, Is.False);
+            Assert.That(ReadSuppressionCount(_inputReader), Is.EqualTo(0));
         }
 
         [Test]
@@ -178,7 +184,7 @@ namespace Tests.PlayMode.Presentation
             SetPresenterField(_presenter, "_inputSuppression", suppression);
             SetPresenterField(_presenter, "_inputReader", _inputReader);
 
-            InvokeMethod(_presenter, "Subscribe");
+            SubscribeLocalInteract();
 
             SetKey(_keyboard, Key.E, true);
 
@@ -194,7 +200,7 @@ namespace Tests.PlayMode.Presentation
             SetPresenterField(_presenter, "_inputSuppression", suppression);
             SetPresenterField(_presenter, "_inputReader", _inputReader);
 
-            InvokeMethod(_presenter, "Subscribe");
+            SubscribeLocalInteract();
 
             SetKey(_keyboard, Key.E, true); // Press E to close
 
@@ -226,6 +232,28 @@ namespace Tests.PlayMode.Presentation
             InputSystem.Update();
         }
 
+        private void SubscribeLocalInteract()
+        {
+            if (_localInteractHandler != null)
+            {
+                return;
+            }
+
+            _localInteractHandler = () => InvokeMethod(_presenter, "OnInteractPressedLocally");
+            _inputReader.InteractPressedLocally += _localInteractHandler;
+        }
+
+        private void UnsubscribeLocalInteract()
+        {
+            if (_localInteractHandler == null || _inputReader == null)
+            {
+                return;
+            }
+
+            _inputReader.InteractPressedLocally -= _localInteractHandler;
+            _localInteractHandler = null;
+        }
+
         private static int GetPresenterMode(RaidInventoryPresenter presenter)
         {
             FieldInfo field = typeof(RaidInventoryPresenter).GetField("_mode", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -246,11 +274,6 @@ namespace Tests.PlayMode.Presentation
             FieldInfo field = typeof(RaidInventoryPresenter).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null);
             return field.GetValue(presenter);
-        }
-
-        private static T GetPresenterField<T>(RaidInventoryPresenter presenter, string fieldName)
-        {
-            return (T)GetPresenterField(presenter, fieldName);
         }
 
         private static void SetPresenterField(RaidInventoryPresenter presenter, string fieldName, object value)

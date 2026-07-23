@@ -73,6 +73,12 @@ public abstract class DefeatPresenterBase : MonoBehaviour
     private bool _hasCapturedBaseState;
     private bool _isInitialized;
 
+    /// <summary>
+    /// Controls whether the body presentation disappears after the defeat transition.
+    /// Persistent corpses override this while retaining the shared combat-visual cleanup.
+    /// </summary>
+    protected virtual bool HideBodyVisualAfterTransition => true;
+
     protected virtual void OnEnable()
     {
         CacheDependencies();
@@ -220,7 +226,7 @@ public abstract class DefeatPresenterBase : MonoBehaviour
             return;
         }
         _visualsHidden = true;
-        if (_bodyVisualRoot != null)
+        if (HideBodyVisualAfterTransition && _bodyVisualRoot != null)
         {
             _bodyVisualRoot.SetActive(false);
         }

@@ -44,22 +44,25 @@ namespace Tests.EditMode.Loot
         }
 
         [Test]
-        public void CorpsePrefab_ReusesContainerAndAdapterWithoutCorpseGameplayScripts()
+        public void EnemyPrefab_PersistsAsInitiallyUnavailableSharedLootContainer()
         {
-            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/LootCorpse.prefab");
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/NetworkEnemy.prefab");
 
             Assert.That(prefab, Is.Not.Null);
             Assert.That(prefab.GetComponent<NetworkObject>(), Is.Not.Null);
             Assert.That(prefab.GetComponentsInChildren<NetworkObject>(true), Has.Length.EqualTo(1));
-            Assert.That(prefab.GetComponent<NetworkLootContainer>(), Is.Not.Null);
+            NetworkLootContainer container = prefab.GetComponent<NetworkLootContainer>();
+            Assert.That(container, Is.Not.Null);
+            Assert.That(container.StartsAvailable, Is.False);
             Assert.That(prefab.GetComponent<NetworkLootContainerInteractable>(), Is.Not.Null);
-            LootContainerRandomContentConfig randomConfig = prefab.GetComponent<LootContainerRandomContentConfig>();
-            Assert.That(randomConfig, Is.Not.Null);
-            Assert.That(randomConfig.enabled, Is.False);
-            Assert.That(randomConfig.Table, Is.Null);
-            Assert.That(prefab.GetComponent<InteractionPromptMetadata>().PromptText, Is.EqualTo("Saquear cadáver"));
-            Assert.That(prefab.GetComponent<IDamageable>(), Is.Null);
+            Assert.That(prefab.GetComponent<InteractionPromptMetadata>().PromptText, Is.EqualTo("Saquear cadaver"));
+            Assert.That(prefab.GetComponent<EnemyCharacter>(), Is.Not.Null);
+            Assert.That(prefab.GetComponent<IDamageable>(), Is.SameAs(prefab.GetComponent<EnemyCharacter>()));
             Assert.That(prefab.GetComponent<ILootReceiver>(), Is.Null);
+
+            Collider2D[] colliders = prefab.GetComponentsInChildren<Collider2D>(true);
+            Assert.That(colliders, Has.Some.Matches<Collider2D>(
+                collider => collider.gameObject.layer == 8 && collider.isTrigger));
         }
 
         [Test]

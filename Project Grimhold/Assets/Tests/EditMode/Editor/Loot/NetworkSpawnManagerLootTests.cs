@@ -15,7 +15,7 @@ namespace Tests.EditMode.Loot
     {
         private const string GameplayScenePath = "Assets/Scenes/Gameplay.unity";
         private const string LootContainerPath = "Assets/Prefabs/LootContainer.prefab";
-        private const string LootCorpsePath = "Assets/Prefabs/LootCorpse.prefab";
+        private const string EnemyPrefabPath = "Assets/Prefabs/NetworkEnemy.prefab";
 
         [Test]
         public void InitialPolicy_UsesExplicitIntegrationsAndRejectsEnemyFallbacks()
@@ -99,19 +99,17 @@ namespace Tests.EditMode.Loot
 
                 NetworkObject lootContainer = AssetDatabase.LoadAssetAtPath<GameObject>(LootContainerPath)
                     .GetComponent<NetworkObject>();
-                NetworkObject lootCorpse = AssetDatabase.LoadAssetAtPath<GameObject>(LootCorpsePath)
+                NetworkObject enemy = AssetDatabase.LoadAssetAtPath<GameObject>(EnemyPrefabPath)
                     .GetComponent<NetworkObject>();
                 LootContainerRandomContentConfig containerRandomConfig = lootContainer.GetComponent<LootContainerRandomContentConfig>();
-                LootContainerRandomContentConfig corpseRandomConfig = lootCorpse.GetComponent<LootContainerRandomContentConfig>();
                 Assert.That(configuredManager.LootContainerPrefab.ToString(),
                     Is.EqualTo(NetworkObjectEditor.GetPrefabGuid(lootContainer).ToString()));
                 Assert.That(configuredManager.LootContainerPrefab.ToString(),
-                    Is.Not.EqualTo(NetworkObjectEditor.GetPrefabGuid(lootCorpse).ToString()));
+                    Is.Not.EqualTo(NetworkObjectEditor.GetPrefabGuid(enemy).ToString()));
                 Assert.That(containerRandomConfig, Is.Not.Null);
                 Assert.That(containerRandomConfig.enabled, Is.True);
                 Assert.That(containerRandomConfig.Table, Is.Not.Null);
-                Assert.That(corpseRandomConfig, Is.Not.Null);
-                Assert.That(corpseRandomConfig.enabled, Is.False);
+                Assert.That(enemy.GetComponent<NetworkLootContainer>().StartsAvailable, Is.False);
 
                 SpawnGroupDefinition lootGroup = FindGroup(configuration, SpawnGroupType.Loot);
                 Assert.That(lootGroup, Is.Not.Null);

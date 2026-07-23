@@ -81,6 +81,34 @@ namespace Tests.EditMode.Loot
         }
 
         [Test]
+        public void DamageableAndLootComposition_UnregistersOwnersIndependently()
+        {
+            var id = new EntityId(44);
+            Damageable damageable = _sourceObject.AddComponent<Damageable>();
+            damageable.IdValue = id.Value;
+            Source source = _sourceObject.AddComponent<Source>();
+            source.IdValue = id.Value;
+            Interactable interactable = _interactableObject.AddComponent<Interactable>();
+            interactable.IdValue = id.Value;
+            Collider2D collider = _sourceObject.AddComponent<BoxCollider2D>();
+
+            Assert.That(_registry.TryRegisterEntity(id, damageable, new[] { collider }), Is.True);
+            Assert.That(_registry.TryRegisterLootSource(id, source, source, new[] { collider }), Is.True);
+            Assert.That(_registry.TryRegisterInteractable(id, interactable), Is.True);
+
+            Assert.That(_registry.TryUnregisterEntity(id, damageable), Is.True);
+            Assert.That(_registry.TryGetDamageable(id, out _), Is.False);
+            Assert.That(_registry.TryGetLootSource(id, out _, out _), Is.True);
+            Assert.That(_registry.TryGetInteractable(id, out _), Is.True);
+            Assert.That(_registry.TryGetEntityId(collider, out _), Is.True);
+
+            Assert.That(_registry.TryUnregisterLootSource(id, source, source), Is.True);
+            Assert.That(_registry.TryGetEntityId(collider, out _), Is.False);
+            Assert.That(_registry.TryUnregisterInteractable(id, interactable), Is.True);
+            Assert.That(_registry.TryGetEntityId(collider, out _), Is.False);
+        }
+
+        [Test]
         public void ConflictingAndObsoleteInteractables_CannotReplaceOrRemoveCurrentOwner()
         {
             var id = new EntityId(43);
@@ -118,6 +146,14 @@ namespace Tests.EditMode.Loot
             public EntityId Id => new(IdValue);
             public bool CanInteract(in InteractionRequest request) => true;
             public InteractionResult Interact(in InteractionRequest request) => InteractionResult.Succeeded();
+        }
+
+        private sealed class Damageable : MonoBehaviour, IDamageable
+        {
+            public int IdValue { get; set; }
+            public EntityId Id => new(IdValue);
+            public bool CanReceiveDamage => true;
+            public DamageResult ApplyDamage(in DamageRequest request) => default;
         }
     }
 }

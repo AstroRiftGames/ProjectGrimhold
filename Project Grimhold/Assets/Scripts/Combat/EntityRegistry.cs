@@ -140,7 +140,8 @@ public sealed class EntityRegistry : MonoBehaviour
     }
 
     /// <summary>
-    /// Unregisters an entity, clearing its contracts and colliders.
+    /// Unregisters only the capabilities owned by the expected entity instance.
+    /// Collider mappings remain while another co-located capability uses the same ID.
     /// </summary>
     public bool TryUnregisterEntity(EntityId id, IEntity expectedEntity)
     {
@@ -149,48 +150,36 @@ public sealed class EntityRegistry : MonoBehaviour
             return false;
         }
 
-        // Check damageable mapping
-        bool hasDamageable = _entities.TryGetValue(id, out var damageable);
-        bool hasInteractable = _interactables.TryGetValue(id, out var interactable);
-        bool hasLootReceiver = _lootReceivers.TryGetValue(id, out var lootReceiver);
+        bool removedCapability = false;
+        if (_entities.TryGetValue(id, out IDamageable damageable) && ReferenceEquals(damageable, expectedEntity))
+        {
+            _entities.Remove(id);
+            removedCapability = true;
+        }
 
-        if (hasDamageable && damageable != expectedEntity)
+        if (_interactables.TryGetValue(id, out IInteractable interactable) && ReferenceEquals(interactable, expectedEntity))
+        {
+            _interactables.Remove(id);
+            removedCapability = true;
+        }
+
+        if (_lootReceivers.TryGetValue(id, out ILootReceiver lootReceiver) && ReferenceEquals(lootReceiver, expectedEntity))
+        {
+            _lootReceivers.Remove(id);
+            removedCapability = true;
+        }
+
+        if (!removedCapability)
         {
             return false;
         }
-        if (hasInteractable && interactable != expectedEntity)
+
+        if (HasRegisteredCapability(id))
         {
-            return false;
-        }
-        if (hasLootReceiver && lootReceiver != expectedEntity)
-        {
-            return false;
-        }
-        if (!hasDamageable && !hasInteractable && !hasLootReceiver)
-        {
-            return false;
+            return true;
         }
 
-        // Remove contracts
-        _entities.Remove(id);
-        _interactables.Remove(id);
-        _lootReceivers.Remove(id);
-
-        // Remove colliders associated with this ID
-        List<Collider2D> keysToRemove = new List<Collider2D>();
-        foreach (var pair in _colliders)
-        {
-            if (pair.Value == id)
-            {
-                keysToRemove.Add(pair.Key);
-            }
-        }
-
-        for (int i = 0; i < keysToRemove.Count; i++)
-        {
-            _colliders.Remove(keysToRemove[i]);
-        }
-
+        RemoveColliderMappings(id);
         return true;
     }
 
@@ -244,6 +233,11 @@ public sealed class EntityRegistry : MonoBehaviour
         }
 
         _interactables.Remove(id);
+        if (!HasRegisteredCapability(id))
+        {
+            RemoveColliderMappings(id);
+        }
+
         return true;
     }
 
@@ -373,6 +367,31 @@ public sealed class EntityRegistry : MonoBehaviour
         }
 
         return true;
+    }
+
+    private bool HasRegisteredCapability(EntityId id)
+    {
+        return _entities.ContainsKey(id) ||
+            _interactables.ContainsKey(id) ||
+            _lootReceivers.ContainsKey(id) ||
+            _lootSources.ContainsKey(id);
+    }
+
+    private void RemoveColliderMappings(EntityId id)
+    {
+        var keysToRemove = new List<Collider2D>();
+        foreach (KeyValuePair<Collider2D, EntityId> pair in _colliders)
+        {
+            if (pair.Value == id)
+            {
+                keysToRemove.Add(pair.Key);
+            }
+        }
+
+        for (int i = 0; i < keysToRemove.Count; i++)
+        {
+            _colliders.Remove(keysToRemove[i]);
+        }
     }
 
     /// <summary>

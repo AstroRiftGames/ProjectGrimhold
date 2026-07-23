@@ -12,8 +12,10 @@ namespace Tests.PlayMode.Loot
     public sealed class LootContainerPreSpawnPlayModeTests
     {
         private const string LootContainerPrefabGuid = "2c19a78647c64b84a765ff0280706b7d";
+        private const string EnemyMeleePrefabGuid = "5deca87613df0fa409d98702aec643d4";
         private NetworkRunner _runner;
         private NetworkObject _prefab;
+        private EnemyFatalDamageSimulationDriver _damageDriver;
 
         [UnityTearDown]
         public IEnumerator TearDown()
@@ -21,12 +23,13 @@ namespace Tests.PlayMode.Loot
             yield return ShutdownRunner(_runner);
             _runner = null;
             _prefab = null;
+            _damageDriver = null;
         }
 
         [UnityTest]
         public IEnumerator AuthoritativeCallback_AppliesEmptyOverrideBeforeSpawned()
         {
-            yield return StartRunnerAndLoadPrefab();
+            yield return StartRunnerAndLoadPrefab(LootContainerPrefabGuid);
 
             bool callbackApplied = false;
             NetworkObject spawned = _runner.Spawn(
@@ -60,7 +63,7 @@ namespace Tests.PlayMode.Loot
         [UnityTest]
         public IEnumerator RejectedCallback_FailsClosedAndCanBeCompensated()
         {
-            yield return StartRunnerAndLoadPrefab();
+            yield return StartRunnerAndLoadPrefab(LootContainerPrefabGuid);
 
             bool callbackApplied = true;
             LogAssert.Expect(
@@ -92,11 +95,60 @@ namespace Tests.PlayMode.Loot
             Assert.That(_runner.TryFindObject(spawnedId, out _), Is.False);
         }
 
-        private IEnumerator StartRunnerAndLoadPrefab()
+        [UnityTest]
+        public IEnumerator FatalEnemy_PersistsAndExposesItsOwnContainer()
+        {
+            yield return StartRunnerAndLoadPrefab(EnemyMeleePrefabGuid);
+
+            NetworkObject spawned = _runner.Spawn(
+                _prefab,
+                Vector3.zero,
+                Quaternion.identity,
+                inputAuthority: null);
+
+            Assert.That(spawned, Is.Not.Null);
+            EnemyCharacter enemy = spawned.GetComponent<EnemyCharacter>();
+            EnemyMovementAIController movement = spawned.GetComponent<EnemyMovementAIController>();
+            EnemyCombatAIController combat = spawned.GetComponent<EnemyCombatAIController>();
+            NetworkLootContainer container = spawned.GetComponent<NetworkLootContainer>();
+            NetworkLootContainerInteractable interactable = spawned.GetComponent<NetworkLootContainerInteractable>();
+            Assert.That(enemy, Is.Not.Null);
+            Assert.That(container, Is.Not.Null);
+            Assert.That(interactable, Is.Not.Null);
+            Assert.That((bool)container.IsInitialized, Is.True);
+            Assert.That((bool)container.IsAvailable, Is.False);
+            Assert.That(interactable.CanInteract(new InteractionRequest(
+                new EntityId(int.MaxValue), enemy.Id, _runner.Tick)), Is.False);
+
+            _damageDriver.Target = enemy;
+            _damageDriver.IsRequested = true;
+            int framesRemaining = 120;
+            while (enemy.IsAlive && framesRemaining-- > 0)
+            {
+                yield return null;
+            }
+
+            Assert.That(enemy.IsAlive, Is.False);
+            Assert.That(_damageDriver.LastResult.IsFatal, Is.True);
+            Assert.That((bool)movement.IsControlEnabled, Is.False);
+            Assert.That((bool)combat.IsAttackEnabled, Is.False);
+            Assert.That((bool)container.IsAvailable, Is.True);
+            Assert.That(interactable.CanInteract(new InteractionRequest(
+                new EntityId(int.MaxValue), enemy.Id, _runner.Tick)), Is.True);
+            Assert.That(spawned.gameObject.activeInHierarchy, Is.True);
+
+            yield return new WaitForSeconds(2.1f);
+            Transform body = spawned.transform.Find("Body");
+            Assert.That(body, Is.Not.Null);
+            Assert.That(body.gameObject.activeSelf, Is.True);
+        }
+
+        private IEnumerator StartRunnerAndLoadPrefab(string prefabGuidValue)
         {
             var runnerObject = new GameObject("LootContainerPreSpawnTestRunner");
             _runner = runnerObject.AddComponent<NetworkRunner>();
             runnerObject.AddComponent<EntityRegistry>();
+            _damageDriver = runnerObject.AddComponent<EnemyFatalDamageSimulationDriver>();
             var sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
             var objectProvider = runnerObject.AddComponent<NetworkObjectProviderDefault>();
 
@@ -115,7 +167,7 @@ namespace Tests.PlayMode.Loot
             Assert.That(startTask.IsFaulted, Is.False, startTask.Exception?.ToString());
             Assert.That(startTask.Result.Ok, Is.True, startTask.Result.ShutdownReason.ToString());
 
-            NetworkObjectGuid prefabGuid = NetworkObjectGuid.Parse(LootContainerPrefabGuid);
+            NetworkObjectGuid prefabGuid = NetworkObjectGuid.Parse(prefabGuidValue);
             NetworkPrefabId prefabId = _runner.Config.PrefabTable.GetId(prefabGuid);
             Assert.That(prefabId.IsValid, Is.True);
             _prefab = _runner.Config.PrefabTable.Load(prefabId, true);
