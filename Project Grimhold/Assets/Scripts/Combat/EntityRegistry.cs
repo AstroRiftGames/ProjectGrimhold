@@ -200,9 +200,7 @@ public sealed class EntityRegistry : MonoBehaviour
     /// <summary>
     /// Attempts to retrieve an extraction participant by its EntityId.
     /// </summary>
-    public bool TryGetExtractionParticipant(
-    EntityId id,
-    out IExtractionParticipant participant)
+    public bool TryGetExtractionParticipant(EntityId id, out IExtractionParticipant participant)
     {
         return _extractionParticipants.TryGetValue(id, out participant);
     }
@@ -247,6 +245,40 @@ public sealed class EntityRegistry : MonoBehaviour
                 _lootReceivers.Remove(id);
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Registers an extraction participant mapping separate from other entities' contracts.
+    /// </summary>
+    public bool TryRegisterExtractionParticipant(EntityId id, IExtractionParticipant participant)
+    {
+        if (participant == null || id.Value == 0)
+            return false;
+
+        if (_extractionParticipants.TryGetValue(id, out var existing))
+        {
+            return existing == participant;
+        }
+
+        _extractionParticipants[id] = participant;
+        return true;
+    }
+
+    /// <summary>
+    /// Unregisters an extraction participant mapping safely without removing other capacities.
+    /// </summary>
+    public bool TryUnregisterExtractionParticipant(EntityId id, IExtractionParticipant participant)
+    {
+        if (participant == null || id.Value == 0)
+            return false;
+
+        if (_extractionParticipants.TryGetValue(id, out var existing) && existing == participant)
+        {
+            _extractionParticipants.Remove(id);
+            return true;
         }
 
         return false;

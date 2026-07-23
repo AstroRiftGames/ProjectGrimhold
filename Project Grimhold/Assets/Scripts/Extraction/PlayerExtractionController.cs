@@ -8,6 +8,8 @@ public sealed class PlayerExtractionController :
     IEntity
 {
     private CharacterBase _character;
+    private EntityRegistry _registry;
+
     public EntityId ID => _character.ID;
 
     [SerializeField]
@@ -47,6 +49,26 @@ public sealed class PlayerExtractionController :
         {
             State = ExtractionState.None;
             InsideExtractionZoneNetworked = false;
+
+            _registry = Runner.GetComponent<EntityRegistry>();
+
+            if (_registry != null)
+            {
+                _registry.TryRegisterExtractionParticipant(
+                    _character.ID,
+                    this);
+            }
+        }
+
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (_registry != null)
+        {
+            _registry.TryUnregisterExtractionParticipant(
+                _character.ID,
+                this);
         }
     }
 
