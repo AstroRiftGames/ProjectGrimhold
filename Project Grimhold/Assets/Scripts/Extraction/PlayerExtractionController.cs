@@ -67,7 +67,7 @@ public sealed class PlayerExtractionController :
     {
         if (!HasStateAuthority)
             return;
-
+        Debug.Log($"Inside Extraction Zone: {value}");
         InsideExtractionZoneNetworked = value;
     }
 

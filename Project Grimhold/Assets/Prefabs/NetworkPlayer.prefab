@@ -360,6 +360,7 @@ GameObject:
   - component: {fileID: 7201000000000000001}
   - component: {fileID: 8800000000000000001}
   - component: {fileID: 8800000000000000002}
+  - component: {fileID: 1825515659868025014}
   m_Layer: 7
   m_Name: NetworkPlayer
   m_TagString: Player
@@ -779,6 +780,7 @@ MonoBehaviour:
   - {fileID: 3133108637029622038}
   - {fileID: 8800000000000000001}
   - {fileID: 8800000000000000002}
+  - {fileID: 1825515659868025014}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &7201000000000000001
 MonoBehaviour:
@@ -855,6 +857,21 @@ MonoBehaviour:
   _candidateSource: {fileID: 8800000000000000001}
   _interactionController: {fileID: 2425433471524800765}
   _lootReceiver: {fileID: 3651456422916611865}
+--- !u!114 &1825515659868025014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4369124737019072436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f435fd4981459f43b75325a692d3922, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerExtractionController
+  _config: {fileID: 11400000, guid: 09074f33f963f634eb8ed1a5aef205d9, type: 2}
+  _movement: {fileID: 7201000000000000005}
+  _State: 0
 --- !u!1 &6258069994273772255
 GameObject:
   m_ObjectHideFlags: 0

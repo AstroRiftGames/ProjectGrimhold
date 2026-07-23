@@ -70,7 +70,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: NetworkedBehaviours.Array.size
-      value: 12
+      value: 13
       objectReference: {fileID: 0}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: 'NetworkedBehaviours.Array.data[5]'
@@ -90,7 +90,11 @@ PrefabInstance:
       objectReference: {fileID: 7908985958866487497}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: 'NetworkedBehaviours.Array.data[11]'
-      value:
+      value: 
+      objectReference: {fileID: 1047145605213894782}
+    - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: 'NetworkedBehaviours.Array.data[12]'
+      value: 
       objectReference: {fileID: 4419447253773158415}
     - target: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: m_Name
@@ -135,6 +139,17 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 4419447253773158415}
   m_SourcePrefab: {fileID: 100100000, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+--- !u!114 &1047145605213894782 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1825515659868025014, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+  m_PrefabInstance: {fileID: 1719739210643671240}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3134367351636412284}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f435fd4981459f43b75325a692d3922, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerExtractionController
 --- !u!114 &1281523189680295321 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 438361259854513489, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
@@ -210,5 +225,5 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8ba463cd892846aab48526ebd6c674e5, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LocalInteractionCandidateSource

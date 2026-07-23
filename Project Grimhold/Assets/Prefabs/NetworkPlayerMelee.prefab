@@ -74,7 +74,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: NetworkedBehaviours.Array.size
-      value: 12
+      value: 13
       objectReference: {fileID: 0}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: 'NetworkedBehaviours.Array.data[1]'
@@ -114,7 +114,11 @@ PrefabInstance:
       objectReference: {fileID: 3092695012236597051}
     - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: 'NetworkedBehaviours.Array.data[11]'
-      value:
+      value: 
+      objectReference: {fileID: 5305552658379351948}
+    - target: {fileID: 3593981370069743005, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+      propertyPath: 'NetworkedBehaviours.Array.data[12]'
+      value: 
       objectReference: {fileID: 481970610349468446}
     - target: {fileID: 4369124737019072436, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
       propertyPath: m_Name
@@ -168,7 +172,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8ba463cd892846aab48526ebd6c674e5, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LocalInteractionCandidateSource
 --- !u!114 &3682681716924389183 stripped
 MonoBehaviour:
@@ -181,6 +185,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f321d6c52d4b4f6a9d3b7e3f1f0a6242, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &5305552658379351948 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1825515659868025014, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
+  m_PrefabInstance: {fileID: 5833451083347531578}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7806615118508775566}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f435fd4981459f43b75325a692d3922, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerExtractionController
 --- !u!114 &6260509138164896363 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 438361259854513489, guid: fea3a7b256f965a4eb9b965832939741, type: 3}
