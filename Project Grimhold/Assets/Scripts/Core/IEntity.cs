@@ -3,5 +3,5 @@
 /// </summary>
 public interface IEntity
 {
-    EntityId Id { get; }
+    EntityId ID { get; }
 }

@@ -205,7 +205,7 @@ namespace Tests.EditMode.Player
 
         private sealed class MockInteractable : IInteractable
         {
-            public EntityId Id { get; }
+            public EntityId ID { get; }
             private readonly bool _canInteract;
             private readonly bool _interactSuccess;
 
@@ -213,7 +213,7 @@ namespace Tests.EditMode.Player
 
             public MockInteractable(EntityId id, bool canInteract, bool interactSuccess)
             {
-                Id = id;
+                ID = id;
                 _canInteract = canInteract;
                 _interactSuccess = interactSuccess;
             }

@@ -72,18 +72,18 @@ namespace Tests.EditMode.Loot
 
         private sealed class StubLootReceiver : ILootReceiver
         {
-            public EntityId Id { get; }
+            public EntityId ID { get; }
 
             public int CommittedAmount { get; private set; }
 
             public StubLootReceiver(EntityId id)
             {
-                Id = id;
+                ID = id;
             }
 
             public LootTransferFailureReason ValidateReceive(in LootTransferRequest request)
             {
-                return request.DestinationId == Id
+                return request.DestinationId == ID
                     ? LootTransferFailureReason.None
                     : LootTransferFailureReason.DestinationNotFound;
             }
@@ -176,17 +176,17 @@ namespace Tests.EditMode.Loot
 
         private sealed class DummyDamageable : IDamageable
         {
-            public EntityId Id { get; }
+            public EntityId ID { get; }
             public bool CanReceiveDamage => true;
 
             public DummyDamageable(EntityId id)
             {
-                Id = id;
+                ID = id;
             }
 
             public DamageResult ApplyDamage(in DamageRequest request)
             {
-                return new DamageResult(Id, true, request.Amount, 0f, true, DamageFailureReason.None);
+                return new DamageResult(ID, true, request.Amount, 0f, true, DamageFailureReason.None);
             }
         }
 

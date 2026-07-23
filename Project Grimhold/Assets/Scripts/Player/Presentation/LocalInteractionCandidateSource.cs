@@ -66,14 +66,14 @@ public sealed class LocalInteractionCandidateSource : NetworkBehaviour
             : (Vector2)transform.position;
 
         InteractionTargetQuery targetQuery = new InteractionTargetQuery(
-            _character.Id,
+            _character.ID,
             origin,
             _config.MaximumDistance,
             _config.TargetLayerMask);
 
         IReadOnlyList<InteractionTarget> candidates = _query.FindTargets(targetQuery);
         HasCandidate = InteractionResolver.TrySelect(
-            _character.Id,
+            _character.ID,
             Runner.Tick,
             _config.MaximumDistance,
             candidates,

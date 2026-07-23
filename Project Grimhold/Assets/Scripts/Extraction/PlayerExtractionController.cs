@@ -4,8 +4,12 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class PlayerExtractionController :
     NetworkBehaviour,
-    IExtractionParticipant
+    IExtractionParticipant,
+    IEntity
 {
+    private CharacterBase _character;
+    public EntityId ID => _character.ID;
+
     [SerializeField]
     private ExtractionConfig _config;
 
@@ -30,6 +34,9 @@ public sealed class PlayerExtractionController :
 
     private void Awake()
     {
+        if(_character == null)
+            _character = GetComponent<CharacterBase>();
+
         if (_movement == null)
             _movement = GetComponent<PlayerMovementNetworkController>();
     }

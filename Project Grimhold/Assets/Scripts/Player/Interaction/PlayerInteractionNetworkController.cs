@@ -135,7 +135,7 @@ public sealed class PlayerInteractionNetworkController : NetworkBehaviour
         Vector2 originPos = _interactionOrigin != null ? (Vector2)_interactionOrigin.position : (Vector2)transform.position;
 
         InteractionTargetQuery targetQuery = new InteractionTargetQuery(
-            _character.Id,
+            _character.ID,
             originPos,
             _config.MaximumDistance,
             _config.TargetLayerMask
@@ -144,7 +144,7 @@ public sealed class PlayerInteractionNetworkController : NetworkBehaviour
         var candidates = _query.FindTargets(in targetQuery);
 
         bool executed = InteractionResolver.TryResolve(
-            _character.Id,
+            _character.ID,
             Runner.Tick,
             _config.MaximumDistance,
             candidates,
@@ -199,7 +199,7 @@ public sealed class PlayerInteractionNetworkController : NetworkBehaviour
     {
         _pendingPresentationEvents.Enqueue(new InteractionPresentationEvent(
             sequence,
-            _character != null ? _character.Id : default,
+            _character != null ? _character.ID : default,
             new EntityId(targetIdValue),
             simulationTick,
             succeeded,

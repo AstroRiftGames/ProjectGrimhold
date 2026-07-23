@@ -58,7 +58,7 @@ namespace Tests.EditMode.Combat
             collider.radius = 0.1f;
 
             var character = go.AddComponent<DummyCharacter>();
-            character.Id = id;
+            character.ID = id;
             character.IsAlive = isAlive;
             character.CanReceiveDamage = canReceiveDamage;
 
@@ -204,7 +204,7 @@ namespace Tests.EditMode.Combat
             col2.radius = 0.1f;
 
             var character = go.AddComponent<DummyCharacter>();
-            character.Id = targetId;
+            character.ID = targetId;
             character.IsAlive = true;
             character.CanReceiveDamage = true;
 
@@ -296,11 +296,11 @@ namespace Tests.EditMode.Combat
             colA2.offset = new Vector2(0.6f, 0f);
 
             var charA = goA.AddComponent<DummyCharacter>();
-            charA.Id = new EntityId(2);
+            charA.ID = new EntityId(2);
             charA.IsAlive = true;
             charA.CanReceiveDamage = true;
 
-            _registry.TryRegister(charA.Id, charA, new[] { colA1, colA2 });
+            _registry.TryRegister(charA.ID, charA, new[] { colA1, colA2 });
             _spawnedObjects.Add(goA);
 
             CreateTarget(new EntityId(3), new Vector2(0.9f, 0f), layer);
@@ -326,13 +326,13 @@ namespace Tests.EditMode.Combat
 
         private sealed class DummyCharacter : MonoBehaviour, IDamageable, ICharacter
         {
-            public EntityId Id { get; set; }
+            public EntityId ID { get; set; }
             public bool IsAlive { get; set; }
             public bool CanReceiveDamage { get; set; }
 
             public DamageResult ApplyDamage(in DamageRequest request)
             {
-                return new DamageResult(Id, true, request.Amount, 100f, false, DamageFailureReason.None);
+                return new DamageResult(ID, true, request.Amount, 100f, false, DamageFailureReason.None);
             }
         }
     }

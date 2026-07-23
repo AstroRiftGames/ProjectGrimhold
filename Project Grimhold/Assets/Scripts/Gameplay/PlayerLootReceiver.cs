@@ -69,13 +69,13 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
     /// </summary>
     public int OccupiedSlotCount => LootInventory.Count;
 
-    public new EntityId Id
+    public new EntityId ID
     {
         get
         {
             if (_character != null)
             {
-                return _character.Id;
+                return _character.ID;
             }
             return default;
         }
@@ -101,7 +101,7 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
         _registry = Runner.GetComponent<EntityRegistry>();
         if (_registry != null)
         {
-            _registeredId = Id;
+            _registeredId = ID;
             _isRegistered = _registry.TryRegisterLootReceiver(_registeredId, this);
             if (!_isRegistered)
             {
@@ -150,7 +150,7 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
             return LootTransferFailureReason.SourceNotFound;
         }
 
-        if (request.DestinationId.Value == 0 || request.DestinationId != Id)
+        if (request.DestinationId.Value == 0 || request.DestinationId != ID)
         {
             return LootTransferFailureReason.DestinationNotFound;
         }
@@ -240,7 +240,7 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
 
         if (definitionIndex < 0 || definitionIndex >= MaxLootTypes ||
             request.SourceId.Value == 0 ||
-            request.DestinationId != Id ||
+            request.DestinationId != ID ||
             !LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes) ||
             inventoryFailure != LootTransferFailureReason.None ||
             (!inventory.ContainsKey(definitionIndex) && inventory.Count >= inventory.Capacity))
@@ -279,7 +279,7 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
             return LootTransferFailureReason.MissingAuthority;
         }
 
-        if (request.SourceId.Value == 0 || request.SourceId != Id)
+        if (request.SourceId.Value == 0 || request.SourceId != ID)
         {
             return LootTransferFailureReason.SourceNotFound;
         }
@@ -354,7 +354,7 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
             request.RequestedAmount);
 
         if (definitionIndex < 0 || definitionIndex >= MaxLootTypes ||
-            request.SourceId != Id ||
+            request.SourceId != ID ||
             request.DestinationId.Value == 0 ||
             !LootInventoryRules.IsValidSlotCapacity(_slotCapacity, MaxLootTypes) ||
             inventoryFailure != LootTransferFailureReason.None)
@@ -395,7 +395,7 @@ public sealed class PlayerLootReceiver : NetworkBehaviour,
         _pendingPresentationEvents.Enqueue(new LootGrantPresentationEvent(
             sequence,
             new EntityId(sourceIdValue),
-            Id,
+            ID,
             definition.LootId,
             amount,
             simulationTick));

@@ -135,7 +135,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
         if (AttackSequence != _lastObservedSequence)
         {
             AttackPerformedEvent performedEvent = new AttackPerformedEvent(
-                _character.Id,
+                _character.ID,
                 (AttackType)LastAttackTypeValue,
                 LastAttackOrigin,
                 LastAttackDirection,
@@ -187,7 +187,7 @@ public sealed class PlayerCombatNetworkController : NetworkBehaviour, ICombatCon
         Vector2 normalizedDirection = direction.normalized;
 
         AttackRequest request = new AttackRequest(
-            _character.Id,
+            _character.ID,
             originPos,
             normalizedDirection,
             (int)Runner.Tick

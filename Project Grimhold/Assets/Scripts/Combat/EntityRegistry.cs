@@ -14,6 +14,7 @@ public sealed class EntityRegistry : MonoBehaviour
     private readonly Dictionary<EntityId, ILootReceiver> _lootReceivers = new();
     private readonly Dictionary<Collider2D, EntityId> _colliders = new();
     private readonly Dictionary<EntityId, IEntity> _registeredEntities = new();
+    private readonly Dictionary<EntityId, IExtractionParticipant> _extractionParticipants = new();
 
     /// <summary>
     /// Attempts to register an entity and its associated colliders.
@@ -51,7 +52,7 @@ public sealed class EntityRegistry : MonoBehaviour
             return false;
         }
 
-        if (entity.Id != id)
+        if (entity.ID != id)
         {
             return false;
         }
@@ -85,6 +86,11 @@ public sealed class EntityRegistry : MonoBehaviour
         if (entity is ILootReceiver lootReceiver)
         {
             _lootReceivers[id] = lootReceiver;
+        }
+
+        if (entity is IExtractionParticipant participant)
+        {
+            _extractionParticipants[id] = participant;
         }
 
         // Register colliders
@@ -136,6 +142,7 @@ public sealed class EntityRegistry : MonoBehaviour
         }
 
         // Remove contracts
+        _extractionParticipants.Remove(id);
         _entities.Remove(id);
         _interactables.Remove(id);
         _lootReceivers.Remove(id);
@@ -191,11 +198,21 @@ public sealed class EntityRegistry : MonoBehaviour
     }
 
     /// <summary>
+    /// Attempts to retrieve an extraction participant by its EntityId.
+    /// </summary>
+    public bool TryGetExtractionParticipant(
+    EntityId id,
+    out IExtractionParticipant participant)
+    {
+        return _extractionParticipants.TryGetValue(id, out participant);
+    }
+
+    /// <summary>
     /// Registers a loot receiver mapping separate from other entities' contracts.
     /// </summary>
     public bool TryRegisterLootReceiver(EntityId id, ILootReceiver receiver)
     {
-        if (receiver == null || id.Value == 0 || receiver.Id != id)
+        if (receiver == null || id.Value == 0 || receiver.ID != id)
         {
             return false;
         }

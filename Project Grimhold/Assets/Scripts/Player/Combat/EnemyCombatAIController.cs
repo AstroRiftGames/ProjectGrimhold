@@ -105,7 +105,7 @@ public sealed class EnemyCombatAIController : NetworkBehaviour, ICombatControlle
         if (AttackSequence != _lastObservedSequence)
         {
             AttackPerformedEvent performedEvent = new AttackPerformedEvent(
-                _character.Id,
+                _character.ID,
                 (AttackType)LastAttackTypeValue,
                 LastAttackOrigin,
                 LastAttackDirection,
@@ -137,7 +137,7 @@ public sealed class EnemyCombatAIController : NetworkBehaviour, ICombatControlle
         Vector2 originPos = _attackOrigin != null ? (Vector2)_attackOrigin.position : (Vector2)transform.position;
 
         AttackRequest request = new AttackRequest(
-            _character.Id,
+            _character.ID,
             originPos,
             normalizedDirection,
             (int)Runner.Tick

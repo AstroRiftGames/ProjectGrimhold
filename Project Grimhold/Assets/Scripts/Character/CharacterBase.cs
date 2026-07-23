@@ -27,7 +27,7 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
     /// Stable entity identifier in the gameplay core.
     /// Mapped from the network identifier assigned by Photon Fusion.
     /// </summary>
-    public new EntityId Id => new EntityId(unchecked((int)Object.Id.Raw));
+    public new EntityId ID => new EntityId(unchecked((int)Object.Id.Raw));
 
     /// <summary>
     /// Indicates whether the character is currently alive.
@@ -59,7 +59,7 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
         _registry = Runner.GetComponent<EntityRegistry>();
         if (_registry != null)
         {
-            _registeredId = Id;
+            _registeredId = ID;
             _isRegistered = _registry.TryRegister(_registeredId, this, _cachedColliders);
         }
     }
@@ -87,22 +87,22 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
         // Attackers or local clients cannot authoritatively confirm damage.
         if (!HasStateAuthority)
         {
-            return new DamageResult(Id, false, 0f, Health, false, DamageFailureReason.MissingAuthority);
+            return new DamageResult(ID, false, 0f, Health, false, DamageFailureReason.MissingAuthority);
         }
 
         if (!IsAlive)
         {
-            return new DamageResult(Id, false, 0f, Health, false, DamageFailureReason.TargetDead);
+            return new DamageResult(ID, false, 0f, Health, false, DamageFailureReason.TargetDead);
         }
 
         if (!CanReceiveDamage)
         {
-            return new DamageResult(Id, false, 0f, Health, false, DamageFailureReason.TargetUnavailable);
+            return new DamageResult(ID, false, 0f, Health, false, DamageFailureReason.TargetUnavailable);
         }
 
         if (request.Amount <= 0f)
         {
-            return new DamageResult(Id, false, 0f, Health, false, DamageFailureReason.InvalidAmount);
+            return new DamageResult(ID, false, 0f, Health, false, DamageFailureReason.InvalidAmount);
         }
 
         float finalDamage = CalculateMitigatedDamage(request.Amount, request.DamageType);
@@ -119,7 +119,7 @@ public abstract class CharacterBase : NetworkBehaviour, ICharacter, IDamageable
         }
 
         return new DamageResult(
-            Id,
+            ID,
             true,
             actualDamageApplied,
             Health,

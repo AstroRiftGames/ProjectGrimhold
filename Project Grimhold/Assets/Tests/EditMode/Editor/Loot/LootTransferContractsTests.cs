@@ -195,7 +195,7 @@ namespace Tests.EditMode.Loot
 
         private sealed class StubContentReader : ILootContentReader
         {
-            public EntityId Id => new(1);
+            public EntityId ID => new(1);
 
             public bool TryGetLootContent(out IReadOnlyList<LootEntry> content)
             {
@@ -206,24 +206,24 @@ namespace Tests.EditMode.Loot
 
         private sealed class StubQuantityReader : ILootQuantityReader
         {
-            public EntityId Id => new(1);
+            public EntityId ID => new(1);
             public int GetLootAmount(LootId lootId) => lootId == new LootId("coin") ? 2 : 0;
         }
 
         private sealed class StubSlotCapacityReader : ILootSlotCapacityReader
         {
-            public EntityId Id => new(1);
+            public EntityId ID => new(1);
             public int SlotCapacity => 4;
             public int OccupiedSlotCount => 1;
         }
 
         private sealed class StubReceiver : ILootReceiver
         {
-            public EntityId Id => new(2);
+            public EntityId ID => new(2);
             public int Amount { get; private set; }
 
             public LootTransferFailureReason ValidateReceive(in LootTransferRequest request) =>
-                request.DestinationId == Id
+                request.DestinationId == ID
                     ? LootTransferFailureReason.None
                     : LootTransferFailureReason.DestinationNotFound;
 
@@ -232,11 +232,11 @@ namespace Tests.EditMode.Loot
 
         private sealed class StubExtractor : ILootExtractor
         {
-            public EntityId Id => new(1);
+            public EntityId ID => new(1);
             public int Amount { get; private set; } = 20;
 
             public LootTransferFailureReason ValidateExtraction(in LootTransferRequest request) =>
-                request.SourceId != Id
+                request.SourceId != ID
                     ? LootTransferFailureReason.SourceNotFound
                     : request.RequestedAmount > Amount
                         ? LootTransferFailureReason.InsufficientAmount

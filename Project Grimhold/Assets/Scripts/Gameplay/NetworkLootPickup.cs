@@ -21,7 +21,7 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
 
     public bool IsAvailable => !IsConsumed;
 
-    public new EntityId Id => new EntityId(unchecked((int)Object.Id.Raw));
+    public new EntityId ID => new EntityId(unchecked((int)Object.Id.Raw));
 
     private Collider2D[] _cachedColliders;
     private EntityRegistry _registry;
@@ -41,7 +41,7 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
         _registry = Runner.GetComponent<EntityRegistry>();
         if (_registry != null)
         {
-            _registeredId = Id;
+            _registeredId = ID;
             _isRegistered = _registry.TryRegisterEntity(_registeredId, this, _cachedColliders);
         }
     }
@@ -57,7 +57,7 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
 
     public bool CanInteract(in InteractionRequest request)
     {
-        if (request.TargetId != Id) return false;
+        if (request.TargetId != ID) return false;
         if (_lootDefinition == null) return false;
         if (_amount <= 0) return false;
         if (!IsAvailable) return false;
@@ -89,7 +89,7 @@ public sealed class NetworkLootPickup : NetworkBehaviour, IPickup
         }
 
         var transferRequest = new LootTransferRequest(
-            Id,
+            ID,
             request.InteractorId,
             _lootDefinition.LootId,
             _amount,

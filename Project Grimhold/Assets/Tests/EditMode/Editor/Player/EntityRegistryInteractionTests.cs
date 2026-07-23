@@ -125,7 +125,7 @@ namespace Tests.EditMode.Player
         private sealed class DummyInteractable : MonoBehaviour, IInteractable
         {
             public int IdValue { get; set; }
-            public EntityId Id => new EntityId(IdValue);
+            public EntityId ID => new EntityId(IdValue);
 
             public bool CanInteract(in InteractionRequest request) => true;
             public InteractionResult Interact(in InteractionRequest request) => InteractionResult.Succeeded(true);
